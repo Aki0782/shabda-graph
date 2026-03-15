@@ -115,6 +115,7 @@ function App() {
   const [error, setError] = useState('');
   const [draggedBarId, setDraggedBarId] = useState('');
   const [isUploadDragging, setIsUploadDragging] = useState(false);
+  const [rawSheetSnapshot, setRawSheetSnapshot] = useState(null);
   const chartExportRef = useRef(null);
 
   const activeSheetData = useMemo(
@@ -127,25 +128,7 @@ function App() {
       return [];
     }
 
-    return activeSheetData.rows
-      .map((row, index) => {
-        const rawYValue = row[activeSheetData.yKey];
-        const numericValue =
-          typeof rawYValue === 'number'
-            ? rawYValue
-            : Number.parseFloat(String(rawYValue).replace(/,/g, ''));
-        const category = getDisplayLabel(row, index, activeSheetData.xKey);
-        const colorKey = row.__colorKey ?? category;
-
-        return {
-          id: getRowId(row, index, activeSheetData.xKey),
-          category,
-          se: Number.isFinite(toNumber(row.se)) ? toNumber(row.se) : 0,
-          value: numericValue,
-          fill: getBarColor(colorKey),
-        };
-      })
-      .filter((row) => Number.isFinite(row.value));
+    return buildChartData(activeSheetData);
   }, [activeSheetData]);
 
   const loadWorkbook = async (file) => {
@@ -157,6 +140,12 @@ function App() {
       const buffer = await file.arrayBuffer();
       const XLSX = await import('xlsx');
       const workbook = XLSX.read(buffer, { type: 'array' });
+      const sourceSheetName = workbook.SheetNames[0];
+      const rawMatrix = XLSX.utils.sheet_to_json(workbook.Sheets[sourceSheetName], {
+        header: 1,
+        defval: '',
+        blankrows: false,
+      });
       const sheetNames =
         workbook.SheetNames.length > 1 ? workbook.SheetNames.slice(1) : workbook.SheetNames;
       const parsedSheets = sheetNames.flatMap((sheetName) =>
@@ -165,12 +154,17 @@ function App() {
 
       setSheets(parsedSheets);
       setActiveSheet(parsedSheets[0]?.name ?? '');
+      setRawSheetSnapshot({
+        name: sourceSheetName,
+        rows: rawMatrix,
+      });
       setFileName(file.name);
       setError(parsedSheets.length ? '' : 'No chartable data was found in the uploaded workbook.');
     } catch (uploadError) {
       setSheets([]);
       setActiveSheet('');
       setFileName('');
+      setRawSheetSnapshot(null);
       setError('The file could not be read. Please upload a valid .xlsx or .xls file.');
       console.error(uploadError);
     }
@@ -260,6 +254,150 @@ function App() {
     } catch (downloadError) {
       console.error(downloadError);
       setError('The graph image could not be downloaded. Please try again.');
+    }
+  };
+
+  const downloadExcelWorkbook = async () => {
+    if (!rawSheetSnapshot || !sheets.length) {
+      return;
+    }
+
+    try {
+      const ExcelJSModule = await import('exceljs');
+      const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet(rawSheetSnapshot.name || 'Raw Data');
+      const baseFileName = (fileName || 'graphs').replace(/\.[^.]+$/, '');
+      const exportableSheets = sheets.filter((sheet) => isMappedYAxisItem(sheet.name));
+
+      if (!exportableSheets.length) {
+        setError('No mapped Y-axis items were available to export.');
+        return;
+      }
+
+      rawSheetSnapshot.rows.forEach((row) => {
+        worksheet.addRow(row);
+      });
+
+      if (rawSheetSnapshot.rows.length) {
+        worksheet.getRow(1).font = { bold: true };
+      }
+
+      worksheet.columns.forEach((column) => {
+        column.width = Math.max(column.width || 10, 14);
+      });
+      worksheet.getColumn(1).width = 14;
+      worksheet.getColumn(2).width = 14;
+      worksheet.getColumn(3).width = 14;
+      worksheet.getColumn(4).width = 14;
+      worksheet.getColumn(5).width = 14;
+      worksheet.getColumn(6).width = 14;
+      worksheet.getColumn(7).width = 4;
+      worksheet.getColumn(8).width = 18;
+
+      let startRow = rawSheetSnapshot.rows.length + 3;
+
+      for (const sheet of exportableSheets) {
+        const exportChartData = buildChartData(sheet);
+        const chartImage = await createChartPngDataUrl({
+          chartData: exportChartData,
+          xAxisLabel: sheet.xAxisLabel,
+          yAxisLabel: sheet.yAxisLabel,
+          pValue: sheet.pValue,
+        });
+
+        worksheet.getCell(`B${startRow}`).value = sheet.name;
+        styleMetricTitleCell(worksheet.getCell(`B${startRow}`));
+
+        const orderedRows = sheet.rows;
+        const headerRowNumber = startRow + 1;
+        const rawStartRow = startRow + 2;
+        const summaryStartRow = startRow + 6;
+        const treatmentColumns = orderedRows
+          .map((row, index) => ({ row, columnNumber: index + 2 }))
+          .filter(({ row }) => Array.isArray(row.rawValues) && row.rawValues.length > 0);
+        const treatmentRanges = treatmentColumns.map(
+          ({ columnNumber }) =>
+            `${getExcelColumnName(columnNumber)}${rawStartRow}:${getExcelColumnName(columnNumber)}${rawStartRow + 3}`,
+        );
+        const allValuesRange = buildCombinedRange(treatmentRanges);
+
+        orderedRows.forEach((row, index) => {
+          const headerCell = worksheet.getCell(headerRowNumber, index + 2);
+          headerCell.value = getDisplayLabel(row, index, sheet.xKey);
+          styleTableHeaderCell(headerCell);
+        });
+
+        for (let rawIndex = 0; rawIndex < 4; rawIndex += 1) {
+          orderedRows.forEach((row, columnIndex) => {
+            const cell = worksheet.getCell(rawStartRow + rawIndex, columnIndex + 2);
+            const rawValue = row.rawValues?.[rawIndex];
+            cell.value = Number.isFinite(toNumber(rawValue)) ? toNumber(rawValue) : '';
+            styleTableValueCell(cell);
+          });
+        }
+
+        worksheet.getCell(`A${summaryStartRow}`).value = 'Mean';
+        worksheet.getCell(`A${summaryStartRow + 1}`).value = 'SE';
+        worksheet.getCell(`A${summaryStartRow + 2}`).value = 'P value';
+        styleSummaryLabelColumn(worksheet, summaryStartRow);
+
+        orderedRows.forEach((row, columnIndex) => {
+          const meanCell = worksheet.getCell(summaryStartRow, columnIndex + 2);
+          meanCell.value = {
+            formula:
+              row.rawValues?.length > 0
+                ? buildMeanFormula(
+                    `${getExcelColumnName(columnIndex + 2)}${rawStartRow}:${getExcelColumnName(columnIndex + 2)}${rawStartRow + 3}`,
+                  )
+                : buildMeanFormula(allValuesRange),
+            result: toNumber(row[sheet.yKey]),
+          };
+          styleSummaryValueCell(meanCell);
+
+          const seCell = worksheet.getCell(summaryStartRow + 1, columnIndex + 2);
+          seCell.value = {
+            formula:
+              row.rawValues?.length > 0
+                ? buildSeFormula(
+                    `${getExcelColumnName(columnIndex + 2)}${rawStartRow}:${getExcelColumnName(columnIndex + 2)}${rawStartRow + 3}`,
+                  )
+                : buildSeFormula(allValuesRange),
+            result: toNumber(row.se),
+          };
+          styleSummaryValueCell(seCell);
+
+          const pCell = worksheet.getCell(summaryStartRow + 2, columnIndex + 2);
+          pCell.value = columnIndex === 0 ? sheet.pValue : '';
+          styleSummaryValueCell(pCell);
+        });
+
+        const imageId = workbook.addImage({
+          base64: chartImage,
+          extension: 'png',
+        });
+        worksheet.addImage(imageId, {
+          tl: { col: 7, row: startRow - 1 },
+          ext: { width: 520, height: 420 },
+        });
+
+        const reservedRows = 22;
+        startRow += reservedRows + 2;
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseFileName}-mapped-graphs.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      console.error(downloadError);
+      setError('The Excel file could not be downloaded. Please try again.');
     }
   };
 
@@ -380,6 +518,9 @@ function App() {
                     {chartData.length ? (
                       <>
                         <div className="chart-actions">
+                          <button type="button" className="download-button" onClick={downloadExcelWorkbook}>
+                            Download Excel
+                          </button>
                           <button type="button" className="download-button" onClick={downloadCurrentChart}>
                             Download JPEG
                           </button>
@@ -510,6 +651,238 @@ async function exportChartAsJpeg(container, fileName) {
   }
 }
 
+function buildChartData(sheet) {
+  return sheet.rows
+    .map((row, index) => {
+      const rawYValue = row[sheet.yKey];
+      const numericValue =
+        typeof rawYValue === 'number'
+          ? rawYValue
+          : Number.parseFloat(String(rawYValue).replace(/,/g, ''));
+      const category = getDisplayLabel(row, index, sheet.xKey);
+      const colorKey = row.__colorKey ?? category;
+
+      return {
+        id: getRowId(row, index, sheet.xKey),
+        category,
+        se: Number.isFinite(toNumber(row.se)) ? toNumber(row.se) : 0,
+        value: numericValue,
+        fill: getBarColor(colorKey),
+      };
+    })
+    .filter((row) => Number.isFinite(row.value));
+}
+
+async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue }) {
+  const width = 520;
+  const height = 420;
+  const svgMarkup = buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height });
+  const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas context not available.');
+  }
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL('image/png');
+}
+
+function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height }) {
+  const margins = { top: 34, right: 24, bottom: 72, left: 78 };
+  const plotWidth = width - margins.left - margins.right;
+  const plotHeight = height - margins.top - margins.bottom;
+  const plotRight = margins.left + plotWidth;
+  const chartMax = Math.max(...chartData.map((entry) => entry.value + (entry.se || 0)), 0);
+  const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getExportAxisScale(chartMax);
+  const bandWidth = chartData.length > 0 ? plotWidth / chartData.length : plotWidth;
+  const barWidth = Math.min(42, Math.max(24, bandWidth - 24));
+
+  const bars = chartData
+    .map((entry, index) => {
+      const x = margins.left + index * bandWidth + (bandWidth - barWidth) / 2;
+      const barHeight = (entry.value / yAxisMax) * plotHeight;
+      const y = margins.top + plotHeight - barHeight;
+      const errorTop = margins.top + plotHeight - ((entry.value + entry.se) / yAxisMax) * plotHeight;
+      const errorBottom = margins.top + plotHeight - (Math.max(entry.value - entry.se, 0) / yAxisMax) * plotHeight;
+      const centerX = x + barWidth / 2;
+
+      return `
+        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="2" fill="${entry.fill}" stroke="#334155" stroke-width="1.4" />
+        <line x1="${centerX}" y1="${errorTop}" x2="${centerX}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
+        <line x1="${centerX - 10}" y1="${errorTop}" x2="${centerX + 10}" y2="${errorTop}" stroke="#111827" stroke-width="1.6" />
+        <line x1="${centerX - 10}" y1="${errorBottom}" x2="${centerX + 10}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
+        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2937">${escapeXml(entry.category)}</text>
+      `;
+    })
+    .join('');
+
+  const ticks = yAxisTicks
+    .map((tick) => {
+      const y = margins.top + plotHeight - (tick / yAxisMax) * plotHeight;
+
+      return `
+        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-size="14" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
+      `;
+    })
+    .join('');
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <rect width="${width}" height="${height}" fill="#ffffff" />
+      <rect x="${margins.left}" y="${margins.top}" width="${plotWidth}" height="${plotHeight}" fill="none" stroke="#111827" stroke-width="1.4" />
+      ${ticks}
+      ${bars}
+      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-size="15" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
+      <text x="${margins.left + plotWidth / 2}" y="${height - 22}" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
+      <text x="${margins.left - 42}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 42} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
+    </svg>
+  `;
+}
+
+function getExportAxisScale(dataMax) {
+  if (!Number.isFinite(dataMax) || dataMax <= 0) {
+    return {
+      max: 10,
+      ticks: Array.from({ length: 11 }, (_, index) => index),
+      usesDecimalTicks: false,
+    };
+  }
+
+  if (dataMax < 1) {
+    return {
+      max: 1,
+      ticks: Array.from({ length: 11 }, (_, index) => Number((index / 10).toFixed(1))),
+      usesDecimalTicks: true,
+    };
+  }
+
+  const roughMax = Math.max(1, Math.ceil(dataMax * 1.12));
+  const step = Math.max(1, Math.ceil(roughMax / 9));
+  const tickCount = Math.ceil(roughMax / step) + 1;
+  const max = step * (tickCount - 1);
+
+  return {
+    max,
+    ticks: Array.from({ length: tickCount }, (_, index) => index * step),
+    usesDecimalTicks: false,
+  };
+}
+
+function formatExportAxisTick(value, usesDecimalTicks) {
+  if (usesDecimalTicks) {
+    return value.toFixed(1);
+  }
+
+  return String(Math.round(value));
+}
+
+function formatExportNumber(value) {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  return value < 1 ? value.toFixed(2) : value.toFixed(2).replace(/\.00$/, '');
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function styleMetricTitleCell(cell) {
+  cell.font = { bold: true, size: 14 };
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'E2F0D9' },
+  };
+  cell.border = getThinBorder();
+  cell.alignment = { horizontal: 'left' };
+}
+
+function styleTableHeaderCell(cell) {
+  cell.font = { bold: true };
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'E2F0D9' },
+  };
+  cell.border = getThinBorder();
+  cell.alignment = { horizontal: 'center' };
+}
+
+function styleTableValueCell(cell) {
+  cell.border = getThinBorder();
+  cell.alignment = { horizontal: 'center' };
+  if (Number.isFinite(toNumber(cell.value))) {
+    cell.numFmt = '0.00';
+  }
+}
+
+function styleSummaryLabelColumn(worksheet, summaryStartRow) {
+  for (let rowIndex = 0; rowIndex < 3; rowIndex += 1) {
+    const cell = worksheet.getCell(summaryStartRow + rowIndex, 1);
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: 'left' };
+  }
+}
+
+function styleSummaryValueCell(cell) {
+  cell.border = getThinBorder();
+  cell.alignment = { horizontal: 'center' };
+  if (
+    Number.isFinite(toNumber(cell.value)) ||
+    (typeof cell.value === 'object' && cell.value !== null && 'formula' in cell.value)
+  ) {
+    cell.numFmt = '0.00';
+  }
+}
+
+function buildMeanFormula(range) {
+  return `ROUND(AVERAGE(${range}),2)`;
+}
+
+function buildSeFormula(range) {
+  return `ROUND(STDEV(${range})/SQRT(COUNT(${range})),2)`;
+}
+
+function buildCombinedRange(ranges) {
+  return ranges.join(',');
+}
+
+function getExcelColumnName(columnNumber) {
+  let current = columnNumber;
+  let name = '';
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return name;
+}
+
+function getThinBorder() {
+  return {
+    top: { style: 'thin', color: { argb: '000000' } },
+    left: { style: 'thin', color: { argb: '000000' } },
+    bottom: { style: 'thin', color: { argb: '000000' } },
+    right: { style: 'thin', color: { argb: '000000' } },
+  };
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -561,6 +934,7 @@ function parseRawColumnTab(matrix, sheetName, header, columnIndex) {
       __colorKey: label,
       __defaultLabel: label,
       category: label,
+      rawValues: group,
       se: groupSe,
       value: roundTo(mean(group), 2),
     };
@@ -576,6 +950,7 @@ function parseRawColumnTab(matrix, sheetName, header, columnIndex) {
           __colorKey: 'Average',
           __defaultLabel: 'Average',
           category: 'Average',
+          rawValues: [],
           se: roundTo(standardError(allValues), 2),
           value: roundTo(mean(allValues), 2),
         },
@@ -800,6 +1175,10 @@ function getBarColor(label) {
 
 function getDefaultYAxisLabel(header) {
   return Y_AXIS_LABELS[header] ?? header;
+}
+
+function isMappedYAxisItem(header) {
+  return Object.hasOwn(Y_AXIS_LABELS, header);
 }
 
 function getRowId(row, index, xKey) {

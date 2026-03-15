@@ -16,9 +16,7 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue }) {
   const barGap = 32;
   const plotWidth = chartData.length * (barWidth + barGap);
   const chartWidth = Math.max(520, margins.left + margins.right + plotWidth);
-  const yAxisMax = getYAxisMax(chartMax);
-  const yAxisTicks = getYAxisTicks(yAxisMax);
-  const usesDecimalTicks = yAxisMax <= 1;
+  const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
 
   return (
     <div className="chart-scroll">
@@ -149,24 +147,33 @@ function PValueLabel({ width, pValue }) {
   );
 }
 
-function getYAxisMax(dataMax) {
+function getAxisScale(dataMax) {
   if (!Number.isFinite(dataMax) || dataMax <= 0) {
-    return 10;
+    return {
+      max: 10,
+      ticks: Array.from({ length: 11 }, (_, index) => index),
+      usesDecimalTicks: false,
+    };
   }
 
   if (dataMax < 1) {
-    return 1;
+    return {
+      max: 1,
+      ticks: Array.from({ length: 11 }, (_, index) => Number((index / 10).toFixed(1))),
+      usesDecimalTicks: true,
+    };
   }
 
-  return Math.max(1, Math.ceil(dataMax * 1.12));
-}
+  const roughMax = Math.max(1, Math.ceil(dataMax * 1.12));
+  const step = Math.max(1, Math.ceil(roughMax / 9));
+  const tickCount = Math.ceil(roughMax / step) + 1;
+  const max = step * (tickCount - 1);
 
-function getYAxisTicks(yAxisMax) {
-  if (yAxisMax <= 1) {
-    return Array.from({ length: 11 }, (_, index) => Number((index / 10).toFixed(1)));
-  }
-
-  return Array.from({ length: yAxisMax + 1 }, (_, index) => index);
+  return {
+    max,
+    ticks: Array.from({ length: tickCount }, (_, index) => index * step),
+    usesDecimalTicks: false,
+  };
 }
 
 function formatAxisTick(value, usesDecimalTicks) {
