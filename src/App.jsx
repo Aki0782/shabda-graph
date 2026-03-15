@@ -114,6 +114,7 @@ function App() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [draggedBarId, setDraggedBarId] = useState('');
+  const [isUploadDragging, setIsUploadDragging] = useState(false);
 
   const activeSheetData = useMemo(
     () => sheets.find((sheet) => sheet.name === activeSheet) ?? null,
@@ -146,9 +147,7 @@ function App() {
       .filter((row) => Number.isFinite(row.value));
   }, [activeSheetData]);
 
-  const handleUpload = async (event) => {
-    const file = event.target.files?.[0];
-
+  const loadWorkbook = async (file) => {
     if (!file) {
       return;
     }
@@ -173,9 +172,20 @@ function App() {
       setFileName('');
       setError('The file could not be read. Please upload a valid .xlsx or .xls file.');
       console.error(uploadError);
-    } finally {
-      event.target.value = '';
     }
+  };
+
+  const handleUpload = async (event) => {
+    const file = event.target.files?.[0];
+    await loadWorkbook(file);
+    event.target.value = '';
+  };
+
+  const handleUploadDrop = async (event) => {
+    event.preventDefault();
+    setIsUploadDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    await loadWorkbook(file);
   };
 
   const updateAxisLabel = (sheetName, axis, value) => {
@@ -252,9 +262,27 @@ function App() {
         </section>
 
         <section className="upload-panel">
-          <label className="upload-box" htmlFor="excel-upload">
+          <label
+            className={isUploadDragging ? 'upload-box drag-active' : 'upload-box'}
+            htmlFor="excel-upload"
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'copy';
+              setIsUploadDragging(true);
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsUploadDragging(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsUploadDragging(false);
+              }
+            }}
+            onDrop={handleUploadDrop}
+          >
             <span className="upload-title">Select Excel file</span>
-            <span className="upload-subtitle">Supports .xlsx and .xls</span>
+            <span className="upload-subtitle">Supports .xlsx and .xls or drag and drop here</span>
             <input
               id="excel-upload"
               type="file"

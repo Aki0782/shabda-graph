@@ -123,6 +123,17 @@ input {
   border-radius: 18px;
 }
 
+.upload-box.drag-active {
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.28), rgba(59, 130, 246, 0.1)),
+    rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 40px rgba(20, 184, 166, 0.12);
+}
+
+.upload-box.drag-active::after {
+  border-color: rgba(15, 118, 110, 0.6);
+}
+
 .upload-title,
 .upload-subtitle {
   position: relative;
