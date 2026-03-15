@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 
 const sampleTips = [
   'Each numeric column in the raw workbook becomes its own chart tab.',
@@ -115,6 +115,7 @@ function App() {
   const [error, setError] = useState('');
   const [draggedBarId, setDraggedBarId] = useState('');
   const [isUploadDragging, setIsUploadDragging] = useState(false);
+  const chartExportRef = useRef(null);
 
   const activeSheetData = useMemo(
     () => sheets.find((sheet) => sheet.name === activeSheet) ?? null,
@@ -249,6 +250,19 @@ function App() {
     );
   };
 
+  const downloadCurrentChart = async () => {
+    if (!activeSheetData || !chartExportRef.current) {
+      return;
+    }
+
+    try {
+      await exportChartAsJpeg(chartExportRef.current, `${activeSheetData.name}-graph.jpeg`);
+    } catch (downloadError) {
+      console.error(downloadError);
+      setError('The graph image could not be downloaded. Please try again.');
+    }
+  };
+
   return (
     <div className="app-shell">
       <main className="app-card">
@@ -363,94 +377,146 @@ function App() {
                   </label>
                 </div>
 
-                {chartData.length ? (
-                  <>
-                    <div className="chart-card">
-                      <Suspense fallback={<div className="chart-loading">Loading chart...</div>}>
-                        <SheetChart
-                          chartData={chartData}
-                          xAxisLabel={activeSheetData.xAxisLabel}
-                          yAxisLabel={activeSheetData.yAxisLabel}
-                          pValue={activeSheetData.pValue}
-                        />
-                      </Suspense>
-                    </div>
-
-                    <div className="bar-editor">
-                      <div className="bar-editor-header">
-                        <div>
-                          <p className="sheet-kicker">Bar Controls</p>
-                          <h3>Edit labels and drag to reorder</h3>
+                    {chartData.length ? (
+                      <>
+                        <div className="chart-actions">
+                          <button type="button" className="download-button" onClick={downloadCurrentChart}>
+                            Download JPEG
+                          </button>
                         </div>
-                      </div>
 
-                      <div className="bar-list" role="list">
-                        {chartData.map((bar) => (
-                          <div
-                            key={bar.id}
-                            role="listitem"
-                            className={draggedBarId === bar.id ? 'bar-item dragging' : 'bar-item'}
-                            draggable
-                            onDragStart={(event) => {
-                              event.dataTransfer.effectAllowed = 'move';
-                              event.dataTransfer.setData('text/plain', bar.id);
-                              setDraggedBarId(bar.id);
-                            }}
-                            onDragOver={(event) => {
-                              event.preventDefault();
-                              event.dataTransfer.dropEffect = 'move';
-                            }}
-                            onDrop={(event) => {
-                              event.preventDefault();
-                              moveBar(
-                                activeSheetData.name,
-                                event.dataTransfer.getData('text/plain'),
-                                bar.id,
-                              );
-                              setDraggedBarId('');
-                            }}
-                            onDragEnd={() => setDraggedBarId('')}
-                          >
-                            <span className="drag-handle" aria-hidden="true">
-                              ::
-                            </span>
-                            <span
-                              className="color-chip"
-                              style={{ backgroundColor: bar.fill }}
-                              aria-hidden="true"
+                        <div className="chart-card" ref={chartExportRef}>
+                          <Suspense fallback={<div className="chart-loading">Loading chart...</div>}>
+                            <SheetChart
+                              chartData={chartData}
+                              xAxisLabel={activeSheetData.xAxisLabel}
+                              yAxisLabel={activeSheetData.yAxisLabel}
+                              pValue={activeSheetData.pValue}
                             />
-                            <label>
-                              <span>Bar label</span>
-                              <input
-                                type="text"
-                                value={bar.category}
-                                onChange={(event) =>
-                                  updateBarLabel(activeSheetData.name, bar.id, event.target.value)
-                                }
-                              />
-                            </label>
-                            <div className="bar-value">
-                              <span>Value</span>
-                              <strong>{formatValue(bar.value)}</strong>
+                          </Suspense>
+                        </div>
+
+                        <div className="bar-editor">
+                          <div className="bar-editor-header">
+                            <div>
+                              <p className="sheet-kicker">Bar Controls</p>
+                              <h3>Edit labels and drag to reorder</h3>
                             </div>
                           </div>
-                        ))}
+
+                          <div className="bar-list" role="list">
+                            {chartData.map((bar) => (
+                              <div
+                                key={bar.id}
+                                role="listitem"
+                                className={draggedBarId === bar.id ? 'bar-item dragging' : 'bar-item'}
+                                draggable
+                                onDragStart={(event) => {
+                                  event.dataTransfer.effectAllowed = 'move';
+                                  event.dataTransfer.setData('text/plain', bar.id);
+                                  setDraggedBarId(bar.id);
+                                }}
+                                onDragOver={(event) => {
+                                  event.preventDefault();
+                                  event.dataTransfer.dropEffect = 'move';
+                                }}
+                                onDrop={(event) => {
+                                  event.preventDefault();
+                                  moveBar(
+                                    activeSheetData.name,
+                                    event.dataTransfer.getData('text/plain'),
+                                    bar.id,
+                                  );
+                                  setDraggedBarId('');
+                                }}
+                                onDragEnd={() => setDraggedBarId('')}
+                              >
+                                <span className="drag-handle" aria-hidden="true">
+                                  ::
+                                </span>
+                                <span
+                                  className="color-chip"
+                                  style={{ backgroundColor: bar.fill }}
+                                  aria-hidden="true"
+                                />
+                                <label>
+                                  <span>Bar label</span>
+                                  <input
+                                    type="text"
+                                    value={bar.category}
+                                    onChange={(event) =>
+                                      updateBarLabel(activeSheetData.name, bar.id, event.target.value)
+                                    }
+                                  />
+                                </label>
+                                <div className="bar-value">
+                                  <span>Value</span>
+                                  <strong>{formatValue(bar.value)}</strong>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="status-message">
+                        No chartable data was found in this sheet. Make sure it has one category
+                        column and at least one numeric column.
                       </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="status-message">
-                    No chartable data was found in this sheet. Make sure it has one category
-                    column and at least one numeric column.
+                    )}
                   </div>
-                )}
-              </div>
-            ) : null}
+                ) : null}
           </section>
         ) : null}
       </main>
     </div>
   );
+}
+
+async function exportChartAsJpeg(container, fileName) {
+  const svg = container.querySelector('svg');
+  if (!svg) {
+    throw new Error('Chart SVG not found.');
+  }
+
+  const serializer = new XMLSerializer();
+  const svgMarkup = serializer.serializeToString(svg);
+  const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+
+  try {
+    const image = await loadImage(url);
+    const width = Math.ceil(svg.viewBox.baseVal.width || svg.clientWidth || 1200);
+    const height = Math.ceil(svg.viewBox.baseVal.height || svg.clientHeight || 420);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Canvas context not available.');
+    }
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/jpeg', 0.95);
+    link.download = fileName;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Chart image could not be loaded.'));
+    image.src = src;
+  });
 }
 
 function parseWorksheet(worksheet, sheetName, XLSX) {

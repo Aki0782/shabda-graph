@@ -265,6 +265,32 @@ input {
   min-height: 460px;
 }
 
+.chart-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.download-button {
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f172a, #334155);
+  color: #f8fafc;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.download-button:hover,
+.download-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+  outline: none;
+}
+
 .chart-scroll {
   display: flex;
   justify-content: center;
@@ -414,4 +440,5 @@ input {
   .tab {
     width: 100%;
   }
+
 }
