@@ -244,7 +244,7 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
     <>
       <text
         x={offset.left + offset.width / 2}
-        y={offset.top + offset.height + 46}
+        y={offset.top + offset.height + 61}
         textAnchor="middle"
         fill="#1f2937"
         fontSize={CHART_FONT_SIZE}
@@ -254,14 +254,14 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
         {xAxisLabel}
       </text>
       <text
-        x={offset.left - 48}
+        x={offset.left - 63}
         y={offset.top + offset.height / 2}
         textAnchor="middle"
         fill="#1f2937"
         fontSize={CHART_FONT_SIZE}
         fontWeight="600"
         fontFamily={CHART_FONT_FAMILY}
-        transform={`rotate(-90 ${offset.left - 48} ${offset.top + offset.height / 2})`}
+        transform={`rotate(-90 ${offset.left - 63} ${offset.top + offset.height / 2})`}
       >
         {yAxisLabel}
       </text>

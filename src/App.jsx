@@ -1248,8 +1248,8 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
       ${ticks}
       ${bars}
       <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
-      <text x="${margins.left + plotWidth / 2}" y="${height - 22}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
-      <text x="${margins.left - 42}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 42} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
+      <text x="${margins.left + plotWidth / 2}" y="${height - 7}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
+      <text x="${margins.left - 57}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 57} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
     </svg>
   `;
 }
