@@ -61,12 +61,12 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
           interval={0}
           angle={chartData.length > 8 ? -20 : 0}
           textAnchor={chartData.length > 8 ? 'end' : 'middle'}
-          tick={{ fill: '#1f2937', fontSize: 14, fontWeight: 600 }}
+          tick={{ fill: '#1f2937', fontSize: 16, fontWeight: 600 }}
         />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tick={{ fill: '#1f2937', fontSize: 14, fontWeight: 600 }}
+          tick={{ fill: '#1f2937', fontSize: 16, fontWeight: 600 }}
           domain={[0, yAxisMax]}
           ticks={yAxisTicks}
           allowDecimals={usesDecimalTicks}
@@ -234,19 +234,19 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
         y={offset.top + offset.height + 46}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize="16"
+        fontSize="18"
         fontWeight="600"
       >
         {xAxisLabel}
       </text>
       <text
-        x={offset.left - 38}
+        x={offset.left - 48}
         y={offset.top + offset.height / 2}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize="16"
+        fontSize="18"
         fontWeight="600"
-        transform={`rotate(-90 ${offset.left - 38} ${offset.top + offset.height / 2})`}
+        transform={`rotate(-90 ${offset.left - 48} ${offset.top + offset.height / 2})`}
       >
         {yAxisLabel}
       </text>
@@ -265,7 +265,7 @@ function PValueLabel({ width, pValue }) {
       y={52}
       textAnchor="end"
       fill="#111827"
-      fontSize="15"
+      fontSize="17"
       fontWeight="600"
     >
       {`p = ${formatNumber(pValue)}`}
