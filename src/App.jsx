@@ -117,6 +117,7 @@ function App() {
   const [draggedBarId, setDraggedBarId] = useState('');
   const [draggedGlobalBarId, setDraggedGlobalBarId] = useState('');
   const [globalBarOrder, setGlobalBarOrder] = useState(DEFAULT_GLOBAL_BAR_ORDER);
+  const [globalBarLabels, setGlobalBarLabels] = useState(createDefaultGlobalBarLabels());
   const [isUploadDragging, setIsUploadDragging] = useState(false);
   const [rawSheetSnapshot, setRawSheetSnapshot] = useState(null);
   const chartExportRef = useRef(null);
@@ -162,6 +163,7 @@ function App() {
       setSheets(orderedSheets);
       setActiveSheet(orderedSheets[0]?.name ?? '');
       setGlobalBarOrder(DEFAULT_GLOBAL_BAR_ORDER);
+      setGlobalBarLabels(createDefaultGlobalBarLabels());
       setRawSheetSnapshot({
         name: sourceSheetName,
         rows: rawMatrix,
@@ -273,6 +275,28 @@ function App() {
       currentSheets.map((sheet) => ({
         ...sheet,
         rows: orderRowsByTreatment(sheet.rows, nextOrder),
+      })),
+    );
+  };
+
+  const updateGlobalBarLabel = (colorKey, value) => {
+    setGlobalBarLabels((currentLabels) => ({
+      ...currentLabels,
+      [colorKey]: value,
+    }));
+
+    setSheets((currentSheets) =>
+      currentSheets.map((sheet) => ({
+        ...sheet,
+        rows: sheet.rows.map((row) =>
+          row.__colorKey === colorKey
+            ? {
+                ...row,
+                [sheet.xKey]: value,
+                __defaultLabel: value || colorKey,
+              }
+            : row,
+        ),
       })),
     );
   };
@@ -552,7 +576,7 @@ function App() {
                   <div className="bar-editor-header">
                     <div>
                       <p className="sheet-kicker">Universal Positions</p>
-                      <h3>Drag once to reorder every sheet</h3>
+                      <h3>Drag and rename once for every sheet</h3>
                     </div>
                   </div>
 
@@ -562,7 +586,9 @@ function App() {
                         key={label}
                         role="listitem"
                         className={
-                          draggedGlobalBarId === label ? 'bar-item dragging' : 'bar-item'
+                          draggedGlobalBarId === label
+                            ? 'bar-item global-bar-item dragging'
+                            : 'bar-item global-bar-item'
                         }
                         draggable
                         onDragStart={(event) => {
@@ -589,10 +615,14 @@ function App() {
                           style={{ backgroundColor: getBarColor(label) }}
                           aria-hidden="true"
                         />
-                        <div className="bar-item-copy">
-                          <strong>{label}</strong>
-                          <span>Applies to all graphs</span>
-                        </div>
+                        <label>
+                          <span>Universal label</span>
+                          <input
+                            type="text"
+                            value={globalBarLabels[label] ?? label}
+                            onChange={(event) => updateGlobalBarLabel(label, event.target.value)}
+                          />
+                        </label>
                       </div>
                     ))}
                   </div>
@@ -1254,6 +1284,10 @@ function roundTo(value, decimals) {
 
 function getBarColor(label) {
   return BAR_COLORS[label] ?? '#0F766E';
+}
+
+function createDefaultGlobalBarLabels() {
+  return Object.fromEntries(TREATMENT_LABELS.map((label) => [label, label]));
 }
 
 function orderRowsByTreatment(rows, treatmentOrder) {

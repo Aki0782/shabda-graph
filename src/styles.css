@@ -343,6 +343,10 @@ input {
     border-color 160ms ease;
 }
 
+.global-bar-item {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
 .bar-item.dragging {
   transform: scale(0.99);
   border-color: #14b8a6;
@@ -369,6 +373,20 @@ input {
   gap: 8px;
   color: #334155;
   font-weight: 600;
+}
+
+.global-bar-item input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.global-bar-item input:focus {
+  outline: 2px solid rgba(20, 184, 166, 0.28);
+  border-color: #14b8a6;
 }
 
 .bar-item-copy {
