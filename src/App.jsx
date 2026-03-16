@@ -1119,9 +1119,11 @@ async function exportChartAsJpeg(container, fileName) {
     const image = await loadImage(url);
     const width = Math.ceil(svg.viewBox.baseVal.width || svg.clientWidth || 1200);
     const height = Math.ceil(svg.viewBox.baseVal.height || svg.clientHeight || 420);
+    const legendItems = getChartLegendItems(container);
+    const legendHeight = legendItems.length ? 58 : 0;
     const canvas = document.createElement('canvas');
     canvas.width = width;
-    canvas.height = height;
+    canvas.height = height + legendHeight;
 
     const context = canvas.getContext('2d');
     if (!context) {
@@ -1129,8 +1131,13 @@ async function exportChartAsJpeg(container, fileName) {
     }
 
     context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
+    context.fillRect(0, 0, width, height + legendHeight);
+
+    if (legendItems.length) {
+      drawChartLegend(context, legendItems, width, legendHeight);
+    }
+
+    context.drawImage(image, 0, legendHeight, width, height);
 
     const link = document.createElement('a');
     link.href = canvas.toDataURL('image/jpeg', 0.95);
@@ -1402,6 +1409,90 @@ function dataUrlToUint8Array(dataUrl) {
   }
 
   return bytes;
+}
+
+function getChartLegendItems(container) {
+  return Array.from(container.querySelectorAll('.chart-legend-item')).map((item, index) => {
+    const swatch = item.querySelector('.chart-legend-swatch');
+    const label = item.querySelector('span:last-child')?.textContent?.trim() || '';
+    const className = swatch?.className || '';
+    let variant = 'total';
+
+    if (className.includes('legend-small')) {
+      variant = 'small';
+    } else if (className.includes('legend-gross')) {
+      variant = 'gross';
+    }
+
+    return {
+      id: `${variant}-${index}`,
+      label,
+      variant,
+    };
+  });
+}
+
+function drawChartLegend(context, items, width, legendHeight) {
+  const swatchWidth = 20;
+  const swatchHeight = 16;
+  const swatchGap = 8;
+  const itemGap = 18;
+  const textY = Math.round(legendHeight / 2) + 1;
+
+  context.save();
+  context.font = '700 20px "Space Grotesk", "Segoe UI", sans-serif';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#0f172a';
+
+  const itemWidths = items.map(
+    (item) => swatchWidth + swatchGap + context.measureText(item.label).width,
+  );
+  const totalWidth =
+    itemWidths.reduce((sum, itemWidth) => sum + itemWidth, 0) + itemGap * Math.max(items.length - 1, 0);
+
+  let cursorX = Math.max(20, (width - totalWidth) / 2);
+
+  items.forEach((item, index) => {
+    const swatchY = Math.round((legendHeight - swatchHeight) / 2);
+    drawLegendSwatch(context, cursorX, swatchY, swatchWidth, swatchHeight, item.variant);
+    context.fillText(item.label, cursorX + swatchWidth + swatchGap, textY);
+    cursorX += itemWidths[index] + itemGap;
+  });
+
+  context.restore();
+}
+
+function drawLegendSwatch(context, x, y, width, height, variant) {
+  if (variant === 'small') {
+    context.fillStyle = '#eff6ff';
+    context.fillRect(x, y, width, height);
+    context.strokeStyle = '#93c5fd';
+    context.lineWidth = 2;
+    for (let offset = -height; offset < width + height; offset += 6) {
+      context.beginPath();
+      context.moveTo(x + offset, y + height);
+      context.lineTo(x + offset + height, y);
+      context.stroke();
+    }
+  } else if (variant === 'gross') {
+    context.fillStyle = '#ecfdf5';
+    context.fillRect(x, y, width, height);
+    context.fillStyle = '#6aa84f';
+    for (let dotX = x + 3; dotX < x + width; dotX += 6) {
+      for (let dotY = y + 3; dotY < y + height; dotY += 6) {
+        context.beginPath();
+        context.arc(dotX, dotY, 1.4, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+  } else {
+    context.fillStyle = '#111827';
+    context.fillRect(x, y, width, height);
+  }
+
+  context.strokeStyle = '#334155';
+  context.lineWidth = 1;
+  context.strokeRect(x, y, width, height);
 }
 
 function loadImage(src) {

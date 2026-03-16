@@ -22,11 +22,9 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
         0,
       )
     : Math.max(...chartData.map((entry) => entry.value + (entry.se || 0)), 0);
-  const margins = isGrouped
-    ? { top: 34, right: 32, left: 36, bottom: 36 }
-    : { top: 34, right: 24, left: 8, bottom: 36 };
+  const margins = { top: 34, right: 32, left: 36, bottom: 36 };
   const plotWidth = isGrouped ? chartData.length * 74 : chartData.length * (42 + 32);
-  const chartWidth = isGrouped ? 580 : 520;
+  const chartWidth = 580;
   const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
   const seriesMap = Object.fromEntries(
     series.flatMap((item) => [
