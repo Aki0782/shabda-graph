@@ -502,6 +502,7 @@ function App() {
       const ExcelJSModule = await import('exceljs');
       const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
       const workbook = new ExcelJS.Workbook();
+      workbook.calcProperties.fullCalcOnLoad = true;
       const worksheet = workbook.addWorksheet(rawSheetSnapshot.name || 'Raw Data');
       const baseFileName = (fileName || 'graphs').replace(/\.[^.]+$/, '');
       const exportableSheets = sheets.filter((sheet) => isMappedYAxisItem(sheet.name));
@@ -609,7 +610,7 @@ function App() {
         });
 
         const imageId = workbook.addImage({
-          base64: chartImage,
+          buffer: dataUrlToUint8Array(chartImage),
           extension: 'png',
         });
         worksheet.addImage(imageId, {
@@ -1312,7 +1313,7 @@ function styleMetricTitleCell(cell) {
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'E2F0D9' },
+    fgColor: { argb: 'FFE2F0D9' },
   };
   cell.border = getThinBorder();
   cell.alignment = { horizontal: 'left' };
@@ -1323,7 +1324,7 @@ function styleTableHeaderCell(cell) {
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'E2F0D9' },
+    fgColor: { argb: 'FFE2F0D9' },
   };
   cell.border = getThinBorder();
   cell.alignment = { horizontal: 'center' };
@@ -1341,6 +1342,7 @@ function styleSummaryLabelColumn(worksheet, summaryStartRow) {
   for (let rowIndex = 0; rowIndex < 3; rowIndex += 1) {
     const cell = worksheet.getCell(summaryStartRow + rowIndex, 1);
     cell.font = { bold: true };
+    cell.border = getThinBorder();
     cell.alignment = { horizontal: 'left' };
   }
 }
@@ -1383,11 +1385,23 @@ function getExcelColumnName(columnNumber) {
 
 function getThinBorder() {
   return {
-    top: { style: 'thin', color: { argb: '000000' } },
-    left: { style: 'thin', color: { argb: '000000' } },
-    bottom: { style: 'thin', color: { argb: '000000' } },
-    right: { style: 'thin', color: { argb: '000000' } },
+    top: { style: 'thin', color: { argb: 'FF000000' } },
+    left: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    right: { style: 'thin', color: { argb: 'FF000000' } },
   };
+}
+
+function dataUrlToUint8Array(dataUrl) {
+  const base64 = String(dataUrl).split(',')[1] ?? '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
 function loadImage(src) {
