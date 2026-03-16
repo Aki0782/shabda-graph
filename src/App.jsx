@@ -1102,7 +1102,15 @@ async function exportChartAsJpeg(container, fileName) {
   }
 
   const serializer = new XMLSerializer();
-  const svgMarkup = serializer.serializeToString(svg);
+  const exportSvg = svg.cloneNode(true);
+  exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  exportSvg.style.fontFamily = '"Space Grotesk", "Segoe UI", sans-serif';
+  exportSvg.querySelectorAll('text').forEach((node) => {
+    if (!node.getAttribute('font-family')) {
+      node.setAttribute('font-family', '"Space Grotesk", "Segoe UI", sans-serif');
+    }
+  });
+  const svgMarkup = serializer.serializeToString(exportSvg);
   const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(svgBlob);
 
@@ -1193,6 +1201,7 @@ async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue
 }
 
 function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height }) {
+  const chartFontFamily = '&quot;Space Grotesk&quot;, &quot;Segoe UI&quot;, sans-serif';
   const margins = { top: 34, right: 24, bottom: 72, left: 78 };
   const plotWidth = width - margins.left - margins.right;
   const plotHeight = height - margins.top - margins.bottom;
@@ -1216,7 +1225,7 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
         <line x1="${centerX}" y1="${errorTop}" x2="${centerX}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorTop}" x2="${centerX + 10}" y2="${errorTop}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorBottom}" x2="${centerX + 10}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
-        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2937">${escapeXml(entry.category)}</text>
+        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(entry.category)}</text>
       `;
     })
     .join('');
@@ -1226,20 +1235,20 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
       const y = margins.top + plotHeight - (tick / yAxisMax) * plotHeight;
 
       return `
-        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-size="14" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
+        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
       `;
     })
     .join('');
 
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="font-family: ${chartFontFamily};">
       <rect width="${width}" height="${height}" fill="#ffffff" />
       <rect x="${margins.left}" y="${margins.top}" width="${plotWidth}" height="${plotHeight}" fill="none" stroke="#111827" stroke-width="1.4" />
       ${ticks}
       ${bars}
-      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-size="15" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
-      <text x="${margins.left + plotWidth / 2}" y="${height - 22}" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
-      <text x="${margins.left - 42}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 42} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
+      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
+      <text x="${margins.left + plotWidth / 2}" y="${height - 22}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
+      <text x="${margins.left - 42}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 42} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
     </svg>
   `;
 }

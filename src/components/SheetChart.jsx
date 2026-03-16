@@ -9,6 +9,9 @@ import {
   YAxis,
 } from 'recharts';
 
+const CHART_FONT_FAMILY = '"Space Grotesk", "Segoe UI", sans-serif';
+const CHART_FONT_SIZE = 20;
+
 function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) {
   const isGrouped = series.length > 0;
   const chartMax = isGrouped
@@ -61,12 +64,22 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
           interval={0}
           angle={chartData.length > 8 ? -20 : 0}
           textAnchor={chartData.length > 8 ? 'end' : 'middle'}
-          tick={{ fill: '#1f2937', fontSize: 20, fontWeight: 600 }}
+          tick={{
+            fill: '#1f2937',
+            fontSize: CHART_FONT_SIZE,
+            fontWeight: 600,
+            fontFamily: CHART_FONT_FAMILY,
+          }}
         />
         <YAxis
           tickLine={false}
           axisLine={false}
-          tick={{ fill: '#1f2937', fontSize: 20, fontWeight: 600 }}
+          tick={{
+            fill: '#1f2937',
+            fontSize: CHART_FONT_SIZE,
+            fontWeight: 600,
+            fontFamily: CHART_FONT_FAMILY,
+          }}
           domain={[0, yAxisMax]}
           ticks={yAxisTicks}
           allowDecimals={usesDecimalTicks}
@@ -234,8 +247,9 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
         y={offset.top + offset.height + 46}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize="20"
+        fontSize={CHART_FONT_SIZE}
         fontWeight="600"
+        fontFamily={CHART_FONT_FAMILY}
       >
         {xAxisLabel}
       </text>
@@ -244,8 +258,9 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
         y={offset.top + offset.height / 2}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize="20"
+        fontSize={CHART_FONT_SIZE}
         fontWeight="600"
+        fontFamily={CHART_FONT_FAMILY}
         transform={`rotate(-90 ${offset.left - 48} ${offset.top + offset.height / 2})`}
       >
         {yAxisLabel}
@@ -265,8 +280,9 @@ function PValueLabel({ width, pValue }) {
       y={52}
       textAnchor="end"
       fill="#111827"
-      fontSize="20"
+      fontSize={CHART_FONT_SIZE}
       fontWeight="600"
+      fontFamily={CHART_FONT_FAMILY}
     >
       {`p = ${formatNumber(pValue)}`}
     </text>
