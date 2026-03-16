@@ -2016,16 +2016,8 @@ function buildPotatoTreatmentGroups(rows) {
 
     const totalYield = resolvePotatoTotalYield(row);
     const totalGrams = toNumber(row['Fresh Plot yield per plot (g)- 6 Bins']);
-    const smallYield = convertYieldComponentToTonnes(
-      row['<1 7/8"   WT. (g) - 6 bins'],
-      totalGrams,
-      totalYield,
-    );
-    const grossYield = convertYieldComponentToTonnes(
-      row['Gross Marketable =(gradeA+oversize) (g) - 6 Bins'],
-      totalGrams,
-      totalYield,
-    );
+    const smallYield = resolvePotatoSmallYield(row, totalGrams, totalYield);
+    const grossYield = resolvePotatoGrossYield(row, totalGrams, totalYield);
     const marketYield = toNumber(row['Marketable (t ha) - 6 bins']);
 
     const current = grouped.get(treatment) ?? {
@@ -2067,6 +2059,32 @@ function resolvePotatoTotalYield(row) {
   }
 
   return Number.NaN;
+}
+
+function resolvePotatoSmallYield(row, totalGrams, totalYield) {
+  const directSmallYield = toNumber(row['<1 7/8 t/ha']);
+  if (Number.isFinite(directSmallYield)) {
+    return directSmallYield;
+  }
+
+  return convertYieldComponentToTonnes(
+    row['<1 7/8"   WT. (g) - 6 bins'],
+    totalGrams,
+    totalYield,
+  );
+}
+
+function resolvePotatoGrossYield(row, totalGrams, totalYield) {
+  const directGrossYield = toNumber(row['Gross Marketable t/ha']);
+  if (Number.isFinite(directGrossYield)) {
+    return directGrossYield;
+  }
+
+  return convertYieldComponentToTonnes(
+    row['Gross Marketable =(gradeA+oversize) (g) - 6 Bins'],
+    totalGrams,
+    totalYield,
+  );
 }
 
 function convertYieldComponentToTonnes(componentValue, totalGrams, totalYield) {
