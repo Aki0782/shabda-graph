@@ -10,6 +10,7 @@ const sampleTips = [
 
 const SheetChart = lazy(() => import('./components/SheetChart'));
 const TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
+const DEFAULT_GLOBAL_BAR_ORDER = ['CT-CC', 'CT-NC', 'RT-CC', 'RT-NC', 'Average'];
 const BAR_COLORS = {
   'CT-CC': '#6AA84F',
   'CT-NC': '#1F6B3A',
@@ -114,6 +115,8 @@ function App() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [draggedBarId, setDraggedBarId] = useState('');
+  const [draggedGlobalBarId, setDraggedGlobalBarId] = useState('');
+  const [globalBarOrder, setGlobalBarOrder] = useState(DEFAULT_GLOBAL_BAR_ORDER);
   const [isUploadDragging, setIsUploadDragging] = useState(false);
   const [rawSheetSnapshot, setRawSheetSnapshot] = useState(null);
   const chartExportRef = useRef(null);
@@ -151,15 +154,20 @@ function App() {
       const parsedSheets = sheetNames.flatMap((sheetName) =>
         parseWorksheet(workbook.Sheets[sheetName], sheetName, XLSX),
       );
+      const orderedSheets = parsedSheets.map((sheet) => ({
+        ...sheet,
+        rows: orderRowsByTreatment(sheet.rows, DEFAULT_GLOBAL_BAR_ORDER),
+      }));
 
-      setSheets(parsedSheets);
-      setActiveSheet(parsedSheets[0]?.name ?? '');
+      setSheets(orderedSheets);
+      setActiveSheet(orderedSheets[0]?.name ?? '');
+      setGlobalBarOrder(DEFAULT_GLOBAL_BAR_ORDER);
       setRawSheetSnapshot({
         name: sourceSheetName,
         rows: rawMatrix,
       });
       setFileName(file.name);
-      setError(parsedSheets.length ? '' : 'No chartable data was found in the uploaded workbook.');
+      setError(orderedSheets.length ? '' : 'No chartable data was found in the uploaded workbook.');
     } catch (uploadError) {
       setSheets([]);
       setActiveSheet('');
@@ -241,6 +249,31 @@ function App() {
           rows: nextRows,
         };
       }),
+    );
+  };
+
+  const moveGlobalBar = (sourceId, targetId) => {
+    if (!sourceId || !targetId || sourceId === targetId) {
+      return;
+    }
+
+    const sourceIndex = globalBarOrder.indexOf(sourceId);
+    const targetIndex = globalBarOrder.indexOf(targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+      return;
+    }
+
+    const nextOrder = [...globalBarOrder];
+    const [movedLabel] = nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedLabel);
+
+    setGlobalBarOrder(nextOrder);
+    setSheets((currentSheets) =>
+      currentSheets.map((sheet) => ({
+        ...sheet,
+        rows: orderRowsByTreatment(sheet.rows, nextOrder),
+      })),
     );
   };
 
@@ -513,6 +546,56 @@ function App() {
                       placeholder="Enter Y-axis label"
                     />
                   </label>
+                </div>
+
+                <div className="global-bar-editor">
+                  <div className="bar-editor-header">
+                    <div>
+                      <p className="sheet-kicker">Universal Positions</p>
+                      <h3>Drag once to reorder every sheet</h3>
+                    </div>
+                  </div>
+
+                  <div className="bar-list" role="list">
+                    {globalBarOrder.map((label) => (
+                      <div
+                        key={label}
+                        role="listitem"
+                        className={
+                          draggedGlobalBarId === label ? 'bar-item dragging' : 'bar-item'
+                        }
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move';
+                          event.dataTransfer.setData('text/plain', label);
+                          setDraggedGlobalBarId(label);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          moveGlobalBar(event.dataTransfer.getData('text/plain'), label);
+                          setDraggedGlobalBarId('');
+                        }}
+                        onDragEnd={() => setDraggedGlobalBarId('')}
+                      >
+                        <span className="drag-handle" aria-hidden="true">
+                          ::
+                        </span>
+                        <span
+                          className="color-chip"
+                          style={{ backgroundColor: getBarColor(label) }}
+                          aria-hidden="true"
+                        />
+                        <div className="bar-item-copy">
+                          <strong>{label}</strong>
+                          <span>Applies to all graphs</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                     {chartData.length ? (
@@ -1171,6 +1254,24 @@ function roundTo(value, decimals) {
 
 function getBarColor(label) {
   return BAR_COLORS[label] ?? '#0F766E';
+}
+
+function orderRowsByTreatment(rows, treatmentOrder) {
+  const orderMap = new Map(treatmentOrder.map((label, index) => [label, index]));
+
+  return [...rows]
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const leftOrder = orderMap.get(left.row.__colorKey) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = orderMap.get(right.row.__colorKey) ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ row }) => row);
 }
 
 function getDefaultYAxisLabel(header) {
