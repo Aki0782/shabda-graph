@@ -381,6 +381,10 @@ select {
   gap: 8px;
 }
 
+.chart-legend-item span:last-child {
+  color: #0f172a;
+}
+
 .chart-legend-swatch {
   display: inline-block;
   width: 20px;

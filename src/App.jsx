@@ -1455,6 +1455,7 @@ function drawChartLegend(context, items, width, legendHeight) {
   items.forEach((item, index) => {
     const swatchY = Math.round((legendHeight - swatchHeight) / 2);
     drawLegendSwatch(context, cursorX, swatchY, swatchWidth, swatchHeight, item.variant);
+    context.fillStyle = '#0f172a';
     context.fillText(item.label, cursorX + swatchWidth + swatchGap, textY);
     cursorX += itemWidths[index] + itemGap;
   });
@@ -1463,11 +1464,16 @@ function drawChartLegend(context, items, width, legendHeight) {
 }
 
 function drawLegendSwatch(context, x, y, width, height, variant) {
+  context.save();
+
   if (variant === 'small') {
     context.fillStyle = '#eff6ff';
     context.fillRect(x, y, width, height);
     context.strokeStyle = '#93c5fd';
-    context.lineWidth = 2;
+    context.lineWidth = 1.6;
+    context.beginPath();
+    context.rect(x, y, width, height);
+    context.clip();
     for (let offset = -height; offset < width + height; offset += 6) {
       context.beginPath();
       context.moveTo(x + offset, y + height);
@@ -1493,6 +1499,7 @@ function drawLegendSwatch(context, x, y, width, height, variant) {
   context.strokeStyle = '#334155';
   context.lineWidth = 1;
   context.strokeRect(x, y, width, height);
+  context.restore();
 }
 
 function loadImage(src) {
