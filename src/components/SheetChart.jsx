@@ -11,6 +11,15 @@ import {
 
 const CHART_FONT_FAMILY = '"Space Grotesk", "Segoe UI", sans-serif';
 const DEFAULT_CHART_FONT_SIZE = 20;
+const BASE_CHART_WIDTH = 580;
+const BASE_PLOT_HEIGHT = 300;
+const RIGHT_MARGIN = 32;
+const TOP_MARGIN = 34;
+const MIN_SINGLE_BAND_WIDTH = 74;
+const MIN_GROUPED_BAND_WIDTH = 88;
+const Y_AXIS_TITLE_GAP = 18;
+const Y_AXIS_TICK_GAP = 12;
+const X_AXIS_TITLE_GAP = 16;
 
 function SheetChart({
   chartData,
@@ -20,23 +29,48 @@ function SheetChart({
   series = [],
   fontSize = DEFAULT_CHART_FONT_SIZE,
   yAxisFontSize = fontSize,
+  disableAnimation = false,
 }) {
+  const safeChartData = Array.isArray(chartData) ? chartData : [];
   const isGrouped = series.length > 0;
   const chartMax = isGrouped
     ? Math.max(
-        ...chartData.flatMap((entry) =>
+        ...safeChartData.flatMap((entry) =>
           series.map((item) => (entry[item.key] || 0) + (entry[item.seKey] || 0)),
         ),
         0,
       )
-    : Math.max(...chartData.map((entry) => entry.value + (entry.se || 0)), 0);
-  const margins = { top: 34, right: 32, left: 36, bottom: 36 };
-  const plotWidth = isGrouped ? chartData.length * 74 : chartData.length * (42 + 32);
-  const chartWidth = 580;
-  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
-  const maxXAxisLines = Math.max(...chartData.map((entry) => wrapAxisText(entry.category, 12).length), 1);
-  const xAxisHeight = Math.max(86, fontSize * 4);
+    : Math.max(...safeChartData.map((entry) => entry.value + (entry.se || 0)), 0);
   const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
+  const plotHeight = BASE_PLOT_HEIGHT;
+  const yAxisTickWidth = Math.max(
+    ...yAxisTicks.map((tick) => measureTextWidth(formatAxisTick(tick, usesDecimalTicks), fontSize)),
+    measureTextWidth(formatAxisTick(yAxisMax, usesDecimalTicks), fontSize),
+  );
+  const yAxisWidth = Math.max(58, Math.ceil(yAxisTickWidth + 18));
+  const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
+  const maxYAxisLineLength = Math.max(plotHeight - 12, yAxisFontSize);
+  const yAxisLines = wrapAxisText(yAxisLabel, maxYAxisLineLength, yAxisFontSize);
+  const yAxisTitleWidth = Math.max(yAxisLineStep, yAxisLines.length * yAxisLineStep);
+  const leftMargin = Math.max(24, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP));
+  const minBandWidth = isGrouped ? MIN_GROUPED_BAND_WIDTH : MIN_SINGLE_BAND_WIDTH;
+  const chartWidth = Math.max(
+    BASE_CHART_WIDTH,
+    Math.ceil(leftMargin + yAxisWidth + RIGHT_MARGIN + Math.max(safeChartData.length, 1) * minBandWidth),
+  );
+  const plotWidth = Math.max(220, chartWidth - leftMargin - yAxisWidth - RIGHT_MARGIN);
+  const bandWidth = safeChartData.length ? plotWidth / safeChartData.length : plotWidth;
+  const tickWrapWidth = Math.max(28, bandWidth - (isGrouped ? 10 : 8));
+  const xAxisTickLines = safeChartData.map((entry) => wrapAxisText(entry.category, tickWrapWidth, fontSize));
+  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
+  const maxXAxisLines = Math.max(...xAxisTickLines.map((lines) => lines.length), 1);
+  const xAxisHeight = Math.max(fontSize + 12, maxXAxisLines * xAxisLineHeight + 10);
+  const xAxisTitleLines = wrapAxisText(xAxisLabel, Math.max(plotWidth - 16, 40), fontSize);
+  const xAxisTitleLineHeight = Math.max(18, Math.round(fontSize * 1.1));
+  const xAxisTitleHeight = xAxisLabel ? xAxisTitleLines.length * xAxisTitleLineHeight : 0;
+  const bottomMargin = Math.max(48, xAxisHeight + xAxisTitleHeight + X_AXIS_TITLE_GAP);
+  const chartHeight = TOP_MARGIN + plotHeight + bottomMargin;
+  const margins = { top: TOP_MARGIN, right: RIGHT_MARGIN, left: leftMargin, bottom: bottomMargin };
   const seriesMap = Object.fromEntries(
     series.flatMap((item) => [
       [item.key, item],
@@ -57,9 +91,9 @@ function SheetChart({
         </div>
       ) : null}
       <BarChart
-        data={chartData}
+        data={safeChartData}
         width={chartWidth}
-        height={420}
+        height={chartHeight}
         margin={margins}
         barCategoryGap={isGrouped ? '12%' : 0}
         barGap={isGrouped ? 4 : 0}
@@ -67,13 +101,22 @@ function SheetChart({
       >
         <XAxis
           dataKey="category"
-          height={Math.max(xAxisHeight, maxXAxisLines * xAxisLineHeight + 26)}
+          height={xAxisHeight}
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={(props) => <WrappedXAxisTick {...props} fontSize={fontSize} />}
+          tickMargin={10}
+          tick={(props) => (
+            <WrappedXAxisTick
+              {...props}
+              fontSize={fontSize}
+              lineHeight={xAxisLineHeight}
+              lines={xAxisTickLines[props.index] ?? wrapAxisText(props.payload?.value, tickWrapWidth, fontSize)}
+            />
+          )}
         />
         <YAxis
+          width={yAxisWidth}
           tickLine={false}
           axisLine={false}
           tick={{
@@ -109,25 +152,39 @@ function SheetChart({
                 dataKey={item.key}
                 name={item.label}
                 fill={item.fill}
+                isAnimationActive={!disableAnimation}
                 radius={[2, 2, 0, 0]}
                 stroke="#334155"
                 strokeWidth={1.1}
                 barSize={20}
                 shape={(props) => <GroupedBarShape {...props} variant={item.key} />}
               >
-                <ErrorBar dataKey={item.seKey} width={6} strokeWidth={1.4} stroke="#111827" />
+                <ErrorBar
+                  dataKey={item.seKey}
+                  width={6}
+                  strokeWidth={1.4}
+                  stroke="#111827"
+                  isAnimationActive={!disableAnimation}
+                />
               </Bar>
             ))
           : (
             <Bar
               dataKey="value"
+              isAnimationActive={!disableAnimation}
               radius={[2, 2, 0, 0]}
               stroke="#334155"
               strokeWidth={1.4}
               barSize={42}
             >
-              <ErrorBar dataKey="se" width={6} strokeWidth={1.6} stroke="#111827" />
-              {chartData.map((entry) => (
+              <ErrorBar
+                dataKey="se"
+                width={6}
+                strokeWidth={1.6}
+                stroke="#111827"
+                isAnimationActive={!disableAnimation}
+              />
+              {safeChartData.map((entry) => (
                 <Cell key={entry.id} fill={entry.fill} />
               ))}
             </Bar>
@@ -137,10 +194,12 @@ function SheetChart({
           component={(props) => (
             <AxisLabels
               {...props}
-              xAxisLabel={xAxisLabel}
-              yAxisLabel={yAxisLabel}
-              fontSize={fontSize}
+              xAxisLines={xAxisTitleLines}
+              xAxisTickHeight={xAxisHeight}
+              xAxisTitleLineHeight={xAxisTitleLineHeight}
+              yAxisLines={yAxisLines}
               yAxisFontSize={yAxisFontSize}
+              yAxisWidth={yAxisWidth}
             />
           )}
         />
@@ -243,30 +302,46 @@ function PlotFrame({ offset }) {
   );
 }
 
-function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize }) {
+function AxisLabels({
+  offset,
+  xAxisLines,
+  xAxisTickHeight,
+  xAxisTitleLineHeight,
+  yAxisLines,
+  yAxisFontSize,
+  yAxisWidth,
+}) {
   if (!offset) {
     return null;
   }
 
-  const yAxisLines = wrapAxisText(yAxisLabel, 16);
-  const yAxisBaseX = offset.left - 63;
-  const yAxisBaseY = offset.top + offset.height / 2;
   const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
+  const yAxisTitleWidth = Math.max(yAxisLineStep, offset.left - yAxisWidth - Y_AXIS_TICK_GAP);
+  const yAxisBaseX = Math.max(yAxisLineStep / 2, yAxisTitleWidth - yAxisLineStep / 2);
+  const yAxisBaseY = offset.top + offset.height / 2;
+  const xAxisLabelY = offset.top + offset.height + xAxisTickHeight + xAxisTitleLineHeight - 4;
+  const orderedYAxisLines = [...yAxisLines].reverse();
 
   return (
     <>
-      <text
-        x={offset.left + offset.width / 2}
-        y={offset.top + offset.height + Math.max(61, fontSize * 3.4)}
-        textAnchor="middle"
-        fill="#1f2937"
-        fontSize={fontSize}
-        fontWeight="600"
-        fontFamily={CHART_FONT_FAMILY}
-      >
-        {xAxisLabel}
-      </text>
-      {yAxisLines.map((line, index) => {
+      {xAxisLines.length ? (
+        <text
+          x={offset.left + offset.width / 2}
+          y={xAxisLabelY}
+          textAnchor="middle"
+          fill="#1f2937"
+          fontSize={xAxisTitleLineHeight}
+          fontWeight="600"
+          fontFamily={CHART_FONT_FAMILY}
+        >
+          {xAxisLines.map((line, index) => (
+            <tspan key={`${line}-${index}`} x={offset.left + offset.width / 2} dy={index === 0 ? 0 : xAxisTitleLineHeight}>
+              {line}
+            </tspan>
+          ))}
+        </text>
+      ) : null}
+      {orderedYAxisLines.map((line, index) => {
         const lineX = yAxisBaseX - index * yAxisLineStep;
 
         return (
@@ -275,6 +350,7 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize })
             x={lineX}
             y={yAxisBaseY}
             textAnchor="middle"
+            dominantBaseline="middle"
             fill="#1f2937"
             fontSize={yAxisFontSize}
             fontWeight="600"
@@ -289,14 +365,11 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize })
   );
 }
 
-function WrappedXAxisTick({ x, y, payload, fontSize }) {
-  const lines = wrapAxisText(payload?.value, 12);
-  const lineHeight = Math.max(16, Math.round(fontSize * 0.95));
-
+function WrappedXAxisTick({ x, y, lines, fontSize, lineHeight }) {
   return (
     <text
       x={x}
-      y={y + 16}
+      y={y + 12}
       textAnchor="middle"
       fill="#1f2937"
       fontSize={fontSize}
@@ -312,15 +385,15 @@ function WrappedXAxisTick({ x, y, payload, fontSize }) {
   );
 }
 
-function PValueLabel({ width, pValue, fontSize }) {
-  if (!Number.isFinite(pValue)) {
+function PValueLabel({ offset, pValue, fontSize }) {
+  if (!offset || !Number.isFinite(pValue)) {
     return null;
   }
 
   return (
     <text
-      x={width - 42}
-      y={52}
+      x={offset.left + offset.width - 10}
+      y={offset.top + 18}
       textAnchor="end"
       fill="#111827"
       fontSize={fontSize}
@@ -369,30 +442,28 @@ function formatAxisTick(value, usesDecimalTicks) {
   return String(Math.round(value));
 }
 
-function wrapAxisText(value, maxCharsPerLine) {
+function wrapAxisText(value, maxWidth, fontSize) {
   const text = String(value ?? '').trim();
   if (!text) {
     return [''];
   }
 
-  const tokens = text
-    .replaceAll(/([/_-])/g, '$1 ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .flatMap((token) => splitLongToken(token, maxCharsPerLine));
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
+    return [text];
+  }
+
+  const tokens = tokenizeAxisText(text).flatMap((token) => splitLongToken(token, maxWidth, fontSize));
   const lines = [];
   let currentLine = '';
 
   tokens.forEach((token) => {
     const nextLine = currentLine ? `${currentLine} ${token}` : token;
-    if (nextLine.length <= maxCharsPerLine) {
+    if (!currentLine || measureTextWidth(nextLine, fontSize) <= maxWidth) {
       currentLine = nextLine;
       return;
     }
 
-    if (currentLine) {
-      lines.push(currentLine);
-    }
+    lines.push(currentLine);
     currentLine = token;
   });
 
@@ -403,16 +474,52 @@ function wrapAxisText(value, maxCharsPerLine) {
   return lines;
 }
 
-function splitLongToken(token, maxCharsPerLine) {
-  if (token.length <= maxCharsPerLine) {
+function tokenizeAxisText(text) {
+  return text
+    .replaceAll(/([/_-])/g, ' $1 ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function splitLongToken(token, maxWidth, fontSize) {
+  if (measureTextWidth(token, fontSize) <= maxWidth) {
     return [token];
   }
 
   const chunks = [];
-  for (let index = 0; index < token.length; index += maxCharsPerLine) {
-    chunks.push(token.slice(index, index + maxCharsPerLine));
+  let currentChunk = '';
+
+  [...token].forEach((character) => {
+    const nextChunk = currentChunk + character;
+    if (!currentChunk || measureTextWidth(nextChunk, fontSize) <= maxWidth) {
+      currentChunk = nextChunk;
+      return;
+    }
+
+    chunks.push(currentChunk);
+    currentChunk = character;
+  });
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
   }
+
   return chunks;
+}
+
+function measureTextWidth(text, fontSize) {
+  if (typeof document === 'undefined') {
+    return String(text ?? '').length * fontSize * 0.62;
+  }
+
+  const canvas = measureTextWidth.canvas ?? (measureTextWidth.canvas = document.createElement('canvas'));
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return String(text ?? '').length * fontSize * 0.62;
+  }
+
+  context.font = `600 ${fontSize}px ${CHART_FONT_FAMILY}`;
+  return context.measureText(String(text ?? '')).width;
 }
 
 function formatNumber(value) {

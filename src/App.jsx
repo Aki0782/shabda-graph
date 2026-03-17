@@ -1,4 +1,6 @@
-import { lazy, Suspense, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import SheetChart from './components/SheetChart';
 
 const DATASET_OPTIONS = [
   { value: 'soil', label: 'Soil Data' },
@@ -23,7 +25,6 @@ const otherCropTips = [
   'Charts for crops other than potato will be added separately.',
 ];
 
-const SheetChart = lazy(() => import('./components/SheetChart'));
 const DEFAULT_SOIL_CHART_FONT_SIZE = 20;
 const TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
 const DEFAULT_GLOBAL_BAR_ORDER = ['CT-CC', 'CT-NC', 'RT-CC', 'RT-NC', 'Average'];
@@ -602,6 +603,7 @@ function App() {
           xAxisLabel: sheet.xAxisLabel,
           yAxisLabel: sheet.yAxisLabel,
           pValue: sheet.pValue,
+          series: sheet.series,
           fontSize: soilChartFontSize,
           yAxisFontSize: soilYAxisFontSize,
         });
@@ -673,15 +675,15 @@ function App() {
         });
 
         const imageId = workbook.addImage({
-          buffer: dataUrlToUint8Array(chartImage),
+          buffer: dataUrlToUint8Array(chartImage.dataUrl),
           extension: 'png',
         });
         worksheet.addImage(imageId, {
           tl: { col: 7, row: startRow - 1 },
-          ext: { width: 580, height: 420 },
+          ext: { width: chartImage.width, height: chartImage.height },
         });
 
-        const reservedRows = 22;
+        const reservedRows = Math.max(22, Math.ceil(chartImage.height / 18));
         startRow += reservedRows + 2;
       }
 
@@ -981,17 +983,15 @@ function App() {
                           }
                         }}
                       >
-                        <Suspense fallback={<div className="chart-loading">Loading chart...</div>}>
-                          <SheetChart
-                            chartData={sheetChartData}
-                            xAxisLabel={sheet.xAxisLabel}
-                            yAxisLabel={sheet.yAxisLabel}
-                            pValue={sheet.pValue}
-                            series={sheet.series}
-                            fontSize={soilChartFontSize}
-                            yAxisFontSize={soilYAxisFontSize}
-                          />
-                        </Suspense>
+                        <SheetChart
+                          chartData={sheetChartData}
+                          xAxisLabel={sheet.xAxisLabel}
+                          yAxisLabel={sheet.yAxisLabel}
+                          pValue={sheet.pValue}
+                          series={sheet.series}
+                          fontSize={soilChartFontSize}
+                          yAxisFontSize={soilYAxisFontSize}
+                        />
                       </div>
                     </div>
                   );
@@ -1096,17 +1096,15 @@ function App() {
                         </div>
 
                         <div className="chart-card" ref={chartExportRef}>
-                          <Suspense fallback={<div className="chart-loading">Loading chart...</div>}>
-                            <SheetChart
-                              chartData={chartData}
-                              xAxisLabel={activeSheetData.xAxisLabel}
-                              yAxisLabel={activeSheetData.yAxisLabel}
-                              pValue={activeSheetData.pValue}
-                              series={activeSheetData.series}
-                              fontSize={soilChartFontSize}
-                              yAxisFontSize={soilYAxisFontSize}
-                            />
-                          </Suspense>
+                          <SheetChart
+                            chartData={chartData}
+                            xAxisLabel={activeSheetData.xAxisLabel}
+                            yAxisLabel={activeSheetData.yAxisLabel}
+                            pValue={activeSheetData.pValue}
+                            series={activeSheetData.series}
+                            fontSize={soilChartFontSize}
+                            yAxisFontSize={soilYAxisFontSize}
+                          />
                         </div>
 
                         {isSingleSeriesChart ? (
@@ -1242,55 +1240,14 @@ function App() {
 }
 
 async function exportChartAsJpeg(container, fileName) {
-  const svg = container.querySelector('svg');
-  if (!svg) {
-    throw new Error('Chart SVG not found.');
-  }
-
-  const serializer = new XMLSerializer();
-  const exportSvg = svg.cloneNode(true);
-  exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  exportSvg.style.fontFamily = '"Space Grotesk", "Segoe UI", sans-serif';
-  exportSvg.querySelectorAll('text').forEach((node) => {
-    if (!node.getAttribute('font-family')) {
-      node.setAttribute('font-family', '"Space Grotesk", "Segoe UI", sans-serif');
-    }
+  const { dataUrl } = await createChartImageDataUrl(container, {
+    mimeType: 'image/jpeg',
+    quality: 0.95,
   });
-  const svgMarkup = serializer.serializeToString(exportSvg);
-  const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await loadImage(url);
-    const width = Math.ceil(svg.viewBox.baseVal.width || svg.clientWidth || 1200);
-    const height = Math.ceil(svg.viewBox.baseVal.height || svg.clientHeight || 420);
-    const legendItems = getChartLegendItems(container);
-    const legendHeight = legendItems.length ? 58 : 0;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height + legendHeight;
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('Canvas context not available.');
-    }
-
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height + legendHeight);
-
-    if (legendItems.length) {
-      drawChartLegend(context, legendItems, width, legendHeight);
-    }
-
-    context.drawImage(image, 0, legendHeight, width, height);
-
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/jpeg', 0.95);
-    link.download = fileName;
-    link.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = fileName;
+  link.click();
 }
 
 function buildChartData(sheet) {
@@ -1337,25 +1294,109 @@ async function createChartPngDataUrl({
   xAxisLabel,
   yAxisLabel,
   pValue,
+  series = [],
   fontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
   yAxisFontSize = fontSize,
 }) {
-  const width = 580;
-  const height = 420;
-  const svgMarkup = buildExportChartSvg({
+  return renderChartForExport({
     chartData,
     xAxisLabel,
     yAxisLabel,
     pValue,
-    width,
-    height,
+    series,
     fontSize,
     yAxisFontSize,
   });
-  const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`);
+}
+
+async function renderChartForExport({
+  chartData,
+  xAxisLabel,
+  yAxisLabel,
+  pValue,
+  series = [],
+  fontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  yAxisFontSize = fontSize,
+}) {
+  const host = document.createElement('div');
+  host.className = 'chart-export-surface';
+  Object.assign(host.style, {
+    position: 'fixed',
+    left: '-10000px',
+    top: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+    zIndex: '-1',
+  });
+  document.body.appendChild(host);
+
+  const root = createRoot(host);
+
+  try {
+    root.render(
+      <div className="chart-card chart-export-card">
+        <SheetChart
+          chartData={chartData}
+          xAxisLabel={xAxisLabel}
+          yAxisLabel={yAxisLabel}
+          pValue={pValue}
+          series={series}
+          fontSize={fontSize}
+          yAxisFontSize={yAxisFontSize}
+          disableAnimation
+        />
+      </div>,
+    );
+
+    const chartContainer = await waitForRenderedChart(host);
+    return createChartImageDataUrl(chartContainer, { mimeType: 'image/png' });
+  } finally {
+    root.unmount();
+    host.remove();
+  }
+}
+
+async function waitForRenderedChart(host) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await nextAnimationFrame();
+    const chartContainer = host.querySelector('.chart-card');
+    if (chartContainer?.querySelector('svg')) {
+      return chartContainer;
+    }
+  }
+
+  throw new Error('Chart render timed out.');
+}
+
+function nextAnimationFrame() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
+  });
+}
+
+async function createChartImageDataUrl(container, { mimeType = 'image/png', quality } = {}) {
+  const canvas = await createChartCanvas(container);
+  const dataUrl = quality == null ? canvas.toDataURL(mimeType) : canvas.toDataURL(mimeType, quality);
+
+  return {
+    dataUrl,
+    width: canvas.width,
+    height: canvas.height,
+  };
+}
+
+async function createChartCanvas(container) {
+  const svg = container.querySelector('svg');
+  if (!svg) {
+    throw new Error('Chart SVG not found.');
+  }
+
+  const contentLayout = getChartContentLayout(container, svg);
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = contentLayout.width;
+  canvas.height = contentLayout.height;
 
   const context = canvas.getContext('2d');
   if (!context) {
@@ -1363,207 +1404,121 @@ async function createChartPngDataUrl({
   }
 
   context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, width, height);
-  context.drawImage(image, 0, 0, width, height);
+  context.fillRect(0, 0, canvas.width, canvas.height);
 
-  return canvas.toDataURL('image/png');
-}
-
-function buildExportChartSvg({
-  chartData,
-  xAxisLabel,
-  yAxisLabel,
-  pValue,
-  width,
-  height,
-  fontSize,
-  yAxisFontSize,
-}) {
-  const chartFontFamily = '&quot;Space Grotesk&quot;, &quot;Segoe UI&quot;, sans-serif';
-  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
-  const maxXAxisLines = Math.max(...chartData.map((entry) => wrapExportAxisText(entry.category, 12).length), 1);
-  const margins = {
-    top: 34,
-    right: 32,
-    bottom: Math.max(96, maxXAxisLines * xAxisLineHeight + Math.max(61, fontSize * 3.4)),
-    left: 78,
-  };
-  const plotWidth = width - margins.left - margins.right;
-  const plotHeight = height - margins.top - margins.bottom;
-  const plotRight = margins.left + plotWidth;
-  const chartMax = Math.max(...chartData.map((entry) => entry.value + (entry.se || 0)), 0);
-  const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getExportAxisScale(chartMax);
-  const bandWidth = chartData.length > 0 ? plotWidth / chartData.length : plotWidth;
-  const barWidth = Math.min(42, Math.max(24, bandWidth - 24));
-
-  const bars = chartData
-    .map((entry, index) => {
-      const x = margins.left + index * bandWidth + (bandWidth - barWidth) / 2;
-      const barHeight = (entry.value / yAxisMax) * plotHeight;
-      const y = margins.top + plotHeight - barHeight;
-      const errorTop = margins.top + plotHeight - ((entry.value + entry.se) / yAxisMax) * plotHeight;
-      const errorBottom = margins.top + plotHeight - (Math.max(entry.value - entry.se, 0) / yAxisMax) * plotHeight;
-      const centerX = x + barWidth / 2;
-
-      return `
-        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="2" fill="${entry.fill}" stroke="#334155" stroke-width="1.4" />
-        <line x1="${centerX}" y1="${errorTop}" x2="${centerX}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
-        <line x1="${centerX - 10}" y1="${errorTop}" x2="${centerX + 10}" y2="${errorTop}" stroke="#111827" stroke-width="1.6" />
-        <line x1="${centerX - 10}" y1="${errorBottom}" x2="${centerX + 10}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
-        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${buildWrappedExportText(entry.category, centerX, xAxisLineHeight)}</text>
-      `;
-    })
-    .join('');
-
-  const ticks = yAxisTicks
-    .map((tick) => {
-      const y = margins.top + plotHeight - (tick / yAxisMax) * plotHeight;
-
-      return `
-        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
-      `;
-    })
-    .join('');
-
-  return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="font-family: ${chartFontFamily};">
-      <rect width="${width}" height="${height}" fill="#ffffff" />
-      <rect x="${margins.left}" y="${margins.top}" width="${plotWidth}" height="${plotHeight}" fill="none" stroke="#111827" stroke-width="1.4" />
-      ${ticks}
-      ${bars}
-      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
-      <text x="${margins.left + plotWidth / 2}" y="${height - 7}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
-      ${buildWrappedExportYAxisLabel(
-        yAxisLabel,
-        margins.left - 57,
-        margins.top + plotHeight / 2,
-        yAxisFontSize,
-        chartFontFamily,
-      )}
-    </svg>
-  `;
-}
-
-function buildWrappedExportText(value, x, lineHeight) {
-  return wrapExportAxisText(value, 12)
-    .map(
-      (line, index) =>
-        `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`,
-    )
-    .join('');
-}
-
-function buildWrappedExportYAxisLabel(value, baseX, baseY, fontSize, chartFontFamily) {
-  const lines = wrapExportAxisText(value, 16);
-  const lineStep = Math.max(18, Math.round(fontSize * 1.1));
-
-  return lines
-    .map((line, index) => {
-      const lineX = baseX - index * lineStep;
-
-      return `<text x="${lineX}" y="${baseY}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${lineX} ${baseY})">${escapeXml(line)}</text>`;
-    })
-    .join('');
-}
-
-function wrapExportAxisText(value, maxCharsPerLine) {
-  const text = String(value ?? '').trim();
-  if (!text) {
-    return [''];
+  if (contentLayout.legend) {
+    drawChartLegend(context, contentLayout.legend);
   }
 
-  const tokens = text
-    .replaceAll(/([/_-])/g, '$1 ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .flatMap((token) => splitExportLongToken(token, maxCharsPerLine));
-  const lines = [];
-  let currentLine = '';
+  const svgMarkup = serializeChartSvg(svg);
+  const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
 
-  tokens.forEach((token) => {
-    const nextLine = currentLine ? `${currentLine} ${token}` : token;
-    if (nextLine.length <= maxCharsPerLine) {
-      currentLine = nextLine;
-      return;
-    }
-
-    if (currentLine) {
-      lines.push(currentLine);
-    }
-    currentLine = token;
-  });
-
-  if (currentLine) {
-    lines.push(currentLine);
+  try {
+    const image = await loadImage(url);
+    context.drawImage(
+      image,
+      contentLayout.svg.x,
+      contentLayout.svg.y,
+      contentLayout.svg.width,
+      contentLayout.svg.height,
+    );
+  } finally {
+    URL.revokeObjectURL(url);
   }
 
-  return lines;
+  return canvas;
 }
 
-function splitExportLongToken(token, maxCharsPerLine) {
-  if (token.length <= maxCharsPerLine) {
-    return [token];
-  }
-
-  const chunks = [];
-  for (let index = 0; index < token.length; index += maxCharsPerLine) {
-    chunks.push(token.slice(index, index + maxCharsPerLine));
-  }
-  return chunks;
-}
-
-function getExportAxisScale(dataMax) {
-  if (!Number.isFinite(dataMax) || dataMax <= 0) {
-    return {
-      max: 10,
-      ticks: Array.from({ length: 11 }, (_, index) => index),
-      usesDecimalTicks: false,
-    };
-  }
-
-  if (dataMax < 1) {
-    return {
-      max: 1,
-      ticks: Array.from({ length: 11 }, (_, index) => Number((index / 10).toFixed(1))),
-      usesDecimalTicks: true,
-    };
-  }
-
-  const roughMax = Math.max(1, Math.ceil(dataMax * 1.12));
-  const step = Math.max(1, Math.ceil(roughMax / 9));
-  const tickCount = Math.ceil(roughMax / step) + 1;
-  const max = step * (tickCount - 1);
+function getChartContentLayout(container, svg) {
+  const svgRect = svg.getBoundingClientRect();
+  const legend = getChartLegendLayout(container);
+  const svgWidth = Math.max(1, Math.ceil(svgRect.width || svg.viewBox.baseVal.width || svg.clientWidth || 1));
+  const svgHeight = Math.max(1, Math.ceil(svgRect.height || svg.viewBox.baseVal.height || svg.clientHeight || 1));
+  const width = Math.ceil(Math.max(svgWidth, legend?.width ?? 0));
+  const top = legend ? Math.min(legend.top, svgRect.top) : svgRect.top;
+  const height = Math.ceil(svgRect.bottom - top);
+  const svgX = Math.round((width - svgWidth) / 2);
+  const svgY = Math.round(svgRect.top - top);
 
   return {
-    max,
-    ticks: Array.from({ length: tickCount }, (_, index) => index * step),
-    usesDecimalTicks: false,
+    width,
+    height,
+    svg: {
+      x: svgX,
+      y: svgY,
+      width: svgWidth,
+      height: svgHeight,
+    },
+    legend: legend
+      ? {
+          width: legend.width,
+          items: legend.items.map((item) => ({
+            ...item,
+            swatchX: Math.round(item.swatchX + (width - legend.width) / 2),
+            textX: Math.round(item.textX + (width - legend.width) / 2),
+          })),
+        }
+      : null,
   };
 }
 
-function formatExportAxisTick(value, usesDecimalTicks) {
-  if (usesDecimalTicks) {
-    return value.toFixed(1);
-  }
+function serializeChartSvg(svg) {
+  const serializer = new XMLSerializer();
+  const exportSvg = svg.cloneNode(true);
+  exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  exportSvg.style.fontFamily = '"Space Grotesk", "Segoe UI", sans-serif';
+  exportSvg.querySelectorAll('text').forEach((node) => {
+    if (!node.getAttribute('font-family')) {
+      node.setAttribute('font-family', '"Space Grotesk", "Segoe UI", sans-serif');
+    }
+  });
 
-  return String(Math.round(value));
+  return serializer.serializeToString(exportSvg);
 }
 
-function formatExportNumber(value) {
-  if (!Number.isFinite(value)) {
-    return '';
+function getChartLegendLayout(container) {
+  const legend = container.querySelector('.chart-legend');
+  if (!legend) {
+    return null;
   }
 
-  return value < 1 ? value.toFixed(2) : value.toFixed(2).replace(/\.00$/, '');
-}
+  const legendRect = legend.getBoundingClientRect();
+  const items = Array.from(legend.querySelectorAll('.chart-legend-item')).map((item) => {
+    const swatch = item.querySelector('.chart-legend-swatch');
+    const label = item.querySelector('span:last-child');
+    const swatchRect = swatch?.getBoundingClientRect();
+    const labelRect = label?.getBoundingClientRect();
+    const labelStyle = label ? window.getComputedStyle(label) : null;
+    const className = swatch?.className || '';
+    let variant = 'total';
 
-function escapeXml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    if (className.includes('legend-small')) {
+      variant = 'small';
+    } else if (className.includes('legend-gross')) {
+      variant = 'gross';
+    }
+
+    return {
+      variant,
+      swatchX: Math.round((swatchRect?.left ?? legendRect.left) - legendRect.left),
+      swatchY: Math.round((swatchRect?.top ?? legendRect.top) - legendRect.top),
+      swatchWidth: Math.round(swatchRect?.width ?? 20),
+      swatchHeight: Math.round(swatchRect?.height ?? 16),
+      textX: Math.round((labelRect?.left ?? legendRect.left) - legendRect.left),
+      textY: Math.round((labelRect?.top ?? legendRect.top) - legendRect.top + (labelRect?.height ?? 20) / 2),
+      text: label?.textContent?.trim() ?? '',
+      fontSize: labelStyle?.fontSize ?? '20px',
+      fontWeight: labelStyle?.fontWeight ?? '700',
+      fontFamily: labelStyle?.fontFamily ?? '"Space Grotesk", "Segoe UI", sans-serif',
+    };
+  });
+
+  return {
+    top: legendRect.top,
+    width: Math.ceil(legendRect.width),
+    items,
+  };
 }
 
 function styleMetricTitleCell(cell) {
@@ -1662,53 +1617,22 @@ function dataUrlToUint8Array(dataUrl) {
   return bytes;
 }
 
-function getChartLegendItems(container) {
-  return Array.from(container.querySelectorAll('.chart-legend-item')).map((item, index) => {
-    const swatch = item.querySelector('.chart-legend-swatch');
-    const label = item.querySelector('span:last-child')?.textContent?.trim() || '';
-    const className = swatch?.className || '';
-    let variant = 'total';
-
-    if (className.includes('legend-small')) {
-      variant = 'small';
-    } else if (className.includes('legend-gross')) {
-      variant = 'gross';
-    }
-
-    return {
-      id: `${variant}-${index}`,
-      label,
-      variant,
-    };
-  });
-}
-
-function drawChartLegend(context, items, width, legendHeight) {
-  const swatchWidth = 20;
-  const swatchHeight = 16;
-  const swatchGap = 8;
-  const itemGap = 18;
-  const textY = Math.round(legendHeight / 2) + 1;
-
+function drawChartLegend(context, legend) {
   context.save();
-  context.font = '700 20px "Space Grotesk", "Segoe UI", sans-serif';
   context.textBaseline = 'middle';
-  context.fillStyle = '#0f172a';
 
-  const itemWidths = items.map(
-    (item) => swatchWidth + swatchGap + context.measureText(item.label).width,
-  );
-  const totalWidth =
-    itemWidths.reduce((sum, itemWidth) => sum + itemWidth, 0) + itemGap * Math.max(items.length - 1, 0);
-
-  let cursorX = Math.max(20, (width - totalWidth) / 2);
-
-  items.forEach((item, index) => {
-    const swatchY = Math.round((legendHeight - swatchHeight) / 2);
-    drawLegendSwatch(context, cursorX, swatchY, swatchWidth, swatchHeight, item.variant);
+  legend.items.forEach((item) => {
+    drawLegendSwatch(
+      context,
+      item.swatchX,
+      item.swatchY,
+      item.swatchWidth,
+      item.swatchHeight,
+      item.variant,
+    );
+    context.font = `${item.fontWeight} ${item.fontSize} ${item.fontFamily}`;
     context.fillStyle = '#0f172a';
-    context.fillText(item.label, cursorX + swatchWidth + swatchGap, textY);
-    cursorX += itemWidths[index] + itemGap;
+    context.fillText(item.text, item.textX, item.textY);
   });
 
   context.restore();
