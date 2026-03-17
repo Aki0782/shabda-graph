@@ -19,6 +19,7 @@ function SheetChart({
   pValue,
   series = [],
   fontSize = DEFAULT_CHART_FONT_SIZE,
+  yAxisFontSize = fontSize,
 }) {
   const isGrouped = series.length > 0;
   const chartMax = isGrouped
@@ -32,6 +33,8 @@ function SheetChart({
   const margins = { top: 34, right: 32, left: 36, bottom: 36 };
   const plotWidth = isGrouped ? chartData.length * 74 : chartData.length * (42 + 32);
   const chartWidth = 580;
+  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
+  const maxXAxisLines = Math.max(...chartData.map((entry) => wrapAxisText(entry.category, 12).length), 1);
   const xAxisHeight = Math.max(86, fontSize * 4);
   const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
   const seriesMap = Object.fromEntries(
@@ -64,7 +67,7 @@ function SheetChart({
       >
         <XAxis
           dataKey="category"
-          height={xAxisHeight}
+          height={Math.max(xAxisHeight, maxXAxisLines * xAxisLineHeight + 26)}
           tickLine={false}
           axisLine={false}
           interval={0}
@@ -137,6 +140,7 @@ function SheetChart({
               xAxisLabel={xAxisLabel}
               yAxisLabel={yAxisLabel}
               fontSize={fontSize}
+              yAxisFontSize={yAxisFontSize}
             />
           )}
         />
@@ -239,10 +243,16 @@ function PlotFrame({ offset }) {
   );
 }
 
-function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize }) {
+function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize }) {
   if (!offset) {
     return null;
   }
+
+  const yAxisLines = wrapAxisText(yAxisLabel, 16);
+  const yAxisBaseX = offset.left - 63;
+  const yAxisBaseY = offset.top + offset.height / 2;
+  const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
+  const yAxisStartY = yAxisBaseY - ((yAxisLines.length - 1) * yAxisLineStep) / 2;
 
   return (
     <>
@@ -257,24 +267,31 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize }) {
       >
         {xAxisLabel}
       </text>
-      <text
-        x={offset.left - 63}
-        y={offset.top + offset.height / 2}
-        textAnchor="middle"
-        fill="#1f2937"
-        fontSize={fontSize}
-        fontWeight="600"
-        fontFamily={CHART_FONT_FAMILY}
-        transform={`rotate(-90 ${offset.left - 63} ${offset.top + offset.height / 2})`}
-      >
-        {yAxisLabel}
-      </text>
+      {yAxisLines.map((line, index) => {
+        const lineY = yAxisStartY + index * yAxisLineStep;
+
+        return (
+          <text
+            key={`${line}-${index}`}
+            x={yAxisBaseX}
+            y={lineY}
+            textAnchor="middle"
+            fill="#1f2937"
+            fontSize={yAxisFontSize}
+            fontWeight="600"
+            fontFamily={CHART_FONT_FAMILY}
+            transform={`rotate(-90 ${yAxisBaseX} ${lineY})`}
+          >
+            {line}
+          </text>
+        );
+      })}
     </>
   );
 }
 
 function WrappedXAxisTick({ x, y, payload, fontSize }) {
-  const lines = wrapAxisText(payload?.value, 12, 2);
+  const lines = wrapAxisText(payload?.value, 12);
   const lineHeight = Math.max(16, Math.round(fontSize * 0.95));
 
   return (
@@ -353,7 +370,7 @@ function formatAxisTick(value, usesDecimalTicks) {
   return String(Math.round(value));
 }
 
-function wrapAxisText(value, maxCharsPerLine, maxLines) {
+function wrapAxisText(value, maxCharsPerLine) {
   const text = String(value ?? '').trim();
   if (!text) {
     return [''];
@@ -384,14 +401,7 @@ function wrapAxisText(value, maxCharsPerLine, maxLines) {
     lines.push(currentLine);
   }
 
-  if (lines.length <= maxLines) {
-    return lines;
-  }
-
-  const limitedLines = lines.slice(0, maxLines);
-  const lastIndex = limitedLines.length - 1;
-  limitedLines[lastIndex] = `${limitedLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
-  return limitedLines;
+  return lines;
 }
 
 function splitLongToken(token, maxCharsPerLine) {

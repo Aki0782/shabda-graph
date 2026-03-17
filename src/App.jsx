@@ -379,6 +379,16 @@ function App() {
     );
   };
 
+  const updateYAxisFontSize = (sheetName, value) => {
+    const nextFontSize = clampChartFontSize(value);
+
+    setSheets((currentSheets) =>
+      currentSheets.map((sheet) =>
+        sheet.name === sheetName ? { ...sheet, yAxisFontSize: nextFontSize } : sheet,
+      ),
+    );
+  };
+
   const updateBarLabel = (sheetName, rowId, value) => {
     setSheets((currentSheets) =>
       currentSheets.map((sheet) => {
@@ -601,6 +611,7 @@ function App() {
           yAxisLabel: sheet.yAxisLabel,
           pValue: sheet.pValue,
           fontSize: sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE,
+          yAxisFontSize: sheet.yAxisFontSize ?? sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE,
         });
 
         worksheet.getCell(`B${startRow}`).value = sheet.name;
@@ -675,7 +686,7 @@ function App() {
         });
         worksheet.addImage(imageId, {
           tl: { col: 7, row: startRow - 1 },
-          ext: { width: 520, height: 420 },
+          ext: { width: 580, height: 420 },
         });
 
         const reservedRows = 22;
@@ -986,6 +997,7 @@ function App() {
                             pValue={sheet.pValue}
                             series={sheet.series}
                             fontSize={sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
+                            yAxisFontSize={sheet.yAxisFontSize ?? sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
                           />
                         </Suspense>
                       </div>
@@ -1060,6 +1072,29 @@ function App() {
                         />
                         <strong>{activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}px</strong>
                       </label>
+                      <label className="font-size-control">
+                        <span>Y-axis title size</span>
+                        <input
+                          type="range"
+                          min="12"
+                          max="32"
+                          step="1"
+                          value={
+                            activeSheetData.yAxisFontSize ??
+                            activeSheetData.chartFontSize ??
+                            DEFAULT_SOIL_CHART_FONT_SIZE
+                          }
+                          onChange={(event) =>
+                            updateYAxisFontSize(activeSheetData.name, event.target.value)
+                          }
+                        />
+                        <strong>
+                          {activeSheetData.yAxisFontSize ??
+                            activeSheetData.chartFontSize ??
+                            DEFAULT_SOIL_CHART_FONT_SIZE}
+                          px
+                        </strong>
+                      </label>
                     </div>
 
                     {chartData.length ? (
@@ -1090,6 +1125,11 @@ function App() {
                               pValue={activeSheetData.pValue}
                               series={activeSheetData.series}
                               fontSize={activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
+                              yAxisFontSize={
+                                activeSheetData.yAxisFontSize ??
+                                activeSheetData.chartFontSize ??
+                                DEFAULT_SOIL_CHART_FONT_SIZE
+                              }
                             />
                           </Suspense>
                         </div>
@@ -1317,8 +1357,15 @@ function buildChartData(sheet) {
     .filter((row) => Number.isFinite(row.value));
 }
 
-async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue, fontSize = DEFAULT_SOIL_CHART_FONT_SIZE }) {
-  const width = 520;
+async function createChartPngDataUrl({
+  chartData,
+  xAxisLabel,
+  yAxisLabel,
+  pValue,
+  fontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  yAxisFontSize = fontSize,
+}) {
+  const width = 580;
   const height = 420;
   const svgMarkup = buildExportChartSvg({
     chartData,
@@ -1328,6 +1375,7 @@ async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue
     width,
     height,
     fontSize,
+    yAxisFontSize,
   });
   const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`);
   const canvas = document.createElement('canvas');
@@ -1346,9 +1394,25 @@ async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue
   return canvas.toDataURL('image/png');
 }
 
-function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height, fontSize }) {
+function buildExportChartSvg({
+  chartData,
+  xAxisLabel,
+  yAxisLabel,
+  pValue,
+  width,
+  height,
+  fontSize,
+  yAxisFontSize,
+}) {
   const chartFontFamily = '&quot;Space Grotesk&quot;, &quot;Segoe UI&quot;, sans-serif';
-  const margins = { top: 34, right: 24, bottom: 96, left: 78 };
+  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
+  const maxXAxisLines = Math.max(...chartData.map((entry) => wrapExportAxisText(entry.category, 12).length), 1);
+  const margins = {
+    top: 34,
+    right: 32,
+    bottom: Math.max(96, maxXAxisLines * xAxisLineHeight + Math.max(61, fontSize * 3.4)),
+    left: 78,
+  };
   const plotWidth = width - margins.left - margins.right;
   const plotHeight = height - margins.top - margins.bottom;
   const plotRight = margins.left + plotWidth;
@@ -1371,7 +1435,7 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
         <line x1="${centerX}" y1="${errorTop}" x2="${centerX}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorTop}" x2="${centerX + 10}" y2="${errorTop}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorBottom}" x2="${centerX + 10}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
-        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${buildWrappedExportText(entry.category, centerX, Math.max(16, Math.round(fontSize * 0.95)))}</text>
+        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${buildWrappedExportText(entry.category, centerX, xAxisLineHeight)}</text>
       `;
     })
     .join('');
@@ -1394,13 +1458,19 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
       ${bars}
       <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
       <text x="${margins.left + plotWidth / 2}" y="${height - 7}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
-      <text x="${margins.left - 57}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 57} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
+      ${buildWrappedExportYAxisLabel(
+        yAxisLabel,
+        margins.left - 57,
+        margins.top + plotHeight / 2,
+        yAxisFontSize,
+        chartFontFamily,
+      )}
     </svg>
   `;
 }
 
 function buildWrappedExportText(value, x, lineHeight) {
-  return wrapExportAxisText(value, 12, 2)
+  return wrapExportAxisText(value, 12)
     .map(
       (line, index) =>
         `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`,
@@ -1408,7 +1478,21 @@ function buildWrappedExportText(value, x, lineHeight) {
     .join('');
 }
 
-function wrapExportAxisText(value, maxCharsPerLine, maxLines) {
+function buildWrappedExportYAxisLabel(value, baseX, baseY, fontSize, chartFontFamily) {
+  const lines = wrapExportAxisText(value, 16);
+  const lineStep = Math.max(18, Math.round(fontSize * 1.1));
+  const startY = baseY - ((lines.length - 1) * lineStep) / 2;
+
+  return lines
+    .map((line, index) => {
+      const lineY = startY + index * lineStep;
+
+      return `<text x="${baseX}" y="${lineY}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${baseX} ${lineY})">${escapeXml(line)}</text>`;
+    })
+    .join('');
+}
+
+function wrapExportAxisText(value, maxCharsPerLine) {
   const text = String(value ?? '').trim();
   if (!text) {
     return [''];
@@ -1439,14 +1523,7 @@ function wrapExportAxisText(value, maxCharsPerLine, maxLines) {
     lines.push(currentLine);
   }
 
-  if (lines.length <= maxLines) {
-    return lines;
-  }
-
-  const limitedLines = lines.slice(0, maxLines);
-  const lastIndex = limitedLines.length - 1;
-  limitedLines[lastIndex] = `${limitedLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
-  return limitedLines;
+  return lines;
 }
 
 function splitExportLongToken(token, maxCharsPerLine) {
