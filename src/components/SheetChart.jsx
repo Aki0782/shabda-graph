@@ -252,7 +252,6 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize })
   const yAxisBaseX = offset.left - 63;
   const yAxisBaseY = offset.top + offset.height / 2;
   const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
-  const yAxisStartY = yAxisBaseY - ((yAxisLines.length - 1) * yAxisLineStep) / 2;
 
   return (
     <>
@@ -268,19 +267,19 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize, yAxisFontSize })
         {xAxisLabel}
       </text>
       {yAxisLines.map((line, index) => {
-        const lineY = yAxisStartY + index * yAxisLineStep;
+        const lineX = yAxisBaseX - index * yAxisLineStep;
 
         return (
           <text
             key={`${line}-${index}`}
-            x={yAxisBaseX}
-            y={lineY}
+            x={lineX}
+            y={yAxisBaseY}
             textAnchor="middle"
             fill="#1f2937"
             fontSize={yAxisFontSize}
             fontWeight="600"
             fontFamily={CHART_FONT_FAMILY}
-            transform={`rotate(-90 ${yAxisBaseX} ${lineY})`}
+            transform={`rotate(-90 ${lineX} ${yAxisBaseY})`}
           >
             {line}
           </text>

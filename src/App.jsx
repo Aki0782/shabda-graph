@@ -137,6 +137,8 @@ function App() {
   const [activeSheet, setActiveSheet] = useState('');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
+  const [soilChartFontSize, setSoilChartFontSize] = useState(DEFAULT_SOIL_CHART_FONT_SIZE);
+  const [soilYAxisFontSize, setSoilYAxisFontSize] = useState(DEFAULT_SOIL_CHART_FONT_SIZE);
   const [draggedBarId, setDraggedBarId] = useState('');
   const [draggedColorBarId, setDraggedColorBarId] = useState('');
   const [draggedGlobalBarId, setDraggedGlobalBarId] = useState('');
@@ -194,6 +196,8 @@ function App() {
     setYieldFarmData({});
     setFileName('');
     setError(nextError);
+    setSoilChartFontSize(DEFAULT_SOIL_CHART_FONT_SIZE);
+    setSoilYAxisFontSize(DEFAULT_SOIL_CHART_FONT_SIZE);
     setDraggedBarId('');
     setDraggedColorBarId('');
     setDraggedGlobalBarId('');
@@ -369,24 +373,12 @@ function App() {
     );
   };
 
-  const updateChartFontSize = (sheetName, value) => {
-    const nextFontSize = clampChartFontSize(value);
-
-    setSheets((currentSheets) =>
-      currentSheets.map((sheet) =>
-        sheet.name === sheetName ? { ...sheet, chartFontSize: nextFontSize } : sheet,
-      ),
-    );
+  const updateChartFontSize = (value) => {
+    setSoilChartFontSize(clampChartFontSize(value));
   };
 
-  const updateYAxisFontSize = (sheetName, value) => {
-    const nextFontSize = clampChartFontSize(value);
-
-    setSheets((currentSheets) =>
-      currentSheets.map((sheet) =>
-        sheet.name === sheetName ? { ...sheet, yAxisFontSize: nextFontSize } : sheet,
-      ),
-    );
+  const updateYAxisFontSize = (value) => {
+    setSoilYAxisFontSize(clampChartFontSize(value));
   };
 
   const updateBarLabel = (sheetName, rowId, value) => {
@@ -610,8 +602,8 @@ function App() {
           xAxisLabel: sheet.xAxisLabel,
           yAxisLabel: sheet.yAxisLabel,
           pValue: sheet.pValue,
-          fontSize: sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE,
-          yAxisFontSize: sheet.yAxisFontSize ?? sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE,
+          fontSize: soilChartFontSize,
+          yAxisFontSize: soilYAxisFontSize,
         });
 
         worksheet.getCell(`B${startRow}`).value = sheet.name;
@@ -996,8 +988,8 @@ function App() {
                             yAxisLabel={sheet.yAxisLabel}
                             pValue={sheet.pValue}
                             series={sheet.series}
-                            fontSize={sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
-                            yAxisFontSize={sheet.yAxisFontSize ?? sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
+                            fontSize={soilChartFontSize}
+                            yAxisFontSize={soilYAxisFontSize}
                           />
                         </Suspense>
                       </div>
@@ -1059,41 +1051,28 @@ function App() {
 
                     <div className="chart-settings">
                       <label className="font-size-control">
-                        <span>Graph text size</span>
+                        <span>Universal graph text size</span>
                         <input
                           type="range"
                           min="12"
                           max="32"
                           step="1"
-                          value={activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
-                          onChange={(event) =>
-                            updateChartFontSize(activeSheetData.name, event.target.value)
-                          }
+                          value={soilChartFontSize}
+                          onChange={(event) => updateChartFontSize(event.target.value)}
                         />
-                        <strong>{activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}px</strong>
+                        <strong>{soilChartFontSize}px</strong>
                       </label>
                       <label className="font-size-control">
-                        <span>Y-axis title size</span>
+                        <span>Universal Y-axis title size</span>
                         <input
                           type="range"
                           min="12"
                           max="32"
                           step="1"
-                          value={
-                            activeSheetData.yAxisFontSize ??
-                            activeSheetData.chartFontSize ??
-                            DEFAULT_SOIL_CHART_FONT_SIZE
-                          }
-                          onChange={(event) =>
-                            updateYAxisFontSize(activeSheetData.name, event.target.value)
-                          }
+                          value={soilYAxisFontSize}
+                          onChange={(event) => updateYAxisFontSize(event.target.value)}
                         />
-                        <strong>
-                          {activeSheetData.yAxisFontSize ??
-                            activeSheetData.chartFontSize ??
-                            DEFAULT_SOIL_CHART_FONT_SIZE}
-                          px
-                        </strong>
+                        <strong>{soilYAxisFontSize}px</strong>
                       </label>
                     </div>
 
@@ -1124,12 +1103,8 @@ function App() {
                               yAxisLabel={activeSheetData.yAxisLabel}
                               pValue={activeSheetData.pValue}
                               series={activeSheetData.series}
-                              fontSize={activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
-                              yAxisFontSize={
-                                activeSheetData.yAxisFontSize ??
-                                activeSheetData.chartFontSize ??
-                                DEFAULT_SOIL_CHART_FONT_SIZE
-                              }
+                              fontSize={soilChartFontSize}
+                              yAxisFontSize={soilYAxisFontSize}
                             />
                           </Suspense>
                         </div>
@@ -1481,13 +1456,12 @@ function buildWrappedExportText(value, x, lineHeight) {
 function buildWrappedExportYAxisLabel(value, baseX, baseY, fontSize, chartFontFamily) {
   const lines = wrapExportAxisText(value, 16);
   const lineStep = Math.max(18, Math.round(fontSize * 1.1));
-  const startY = baseY - ((lines.length - 1) * lineStep) / 2;
 
   return lines
     .map((line, index) => {
-      const lineY = startY + index * lineStep;
+      const lineX = baseX - index * lineStep;
 
-      return `<text x="${baseX}" y="${lineY}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${baseX} ${lineY})">${escapeXml(line)}</text>`;
+      return `<text x="${lineX}" y="${baseY}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${lineX} ${baseY})">${escapeXml(line)}</text>`;
     })
     .join('');
 }
