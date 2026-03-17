@@ -10,9 +10,16 @@ import {
 } from 'recharts';
 
 const CHART_FONT_FAMILY = '"Space Grotesk", "Segoe UI", sans-serif';
-const CHART_FONT_SIZE = 20;
+const DEFAULT_CHART_FONT_SIZE = 20;
 
-function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) {
+function SheetChart({
+  chartData,
+  xAxisLabel,
+  yAxisLabel,
+  pValue,
+  series = [],
+  fontSize = DEFAULT_CHART_FONT_SIZE,
+}) {
   const isGrouped = series.length > 0;
   const chartMax = isGrouped
     ? Math.max(
@@ -25,6 +32,7 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
   const margins = { top: 34, right: 32, left: 36, bottom: 36 };
   const plotWidth = isGrouped ? chartData.length * 74 : chartData.length * (42 + 32);
   const chartWidth = 580;
+  const xAxisHeight = Math.max(86, fontSize * 4);
   const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
   const seriesMap = Object.fromEntries(
     series.flatMap((item) => [
@@ -56,25 +64,18 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
       >
         <XAxis
           dataKey="category"
-          height={70}
+          height={xAxisHeight}
           tickLine={false}
           axisLine={false}
           interval={0}
-          angle={chartData.length > 8 ? -20 : 0}
-          textAnchor={chartData.length > 8 ? 'end' : 'middle'}
-          tick={{
-            fill: '#1f2937',
-            fontSize: CHART_FONT_SIZE,
-            fontWeight: 600,
-            fontFamily: CHART_FONT_FAMILY,
-          }}
+          tick={(props) => <WrappedXAxisTick {...props} fontSize={fontSize} />}
         />
         <YAxis
           tickLine={false}
           axisLine={false}
           tick={{
             fill: '#1f2937',
-            fontSize: CHART_FONT_SIZE,
+            fontSize,
             fontWeight: 600,
             fontFamily: CHART_FONT_FAMILY,
           }}
@@ -131,10 +132,15 @@ function SheetChart({ chartData, xAxisLabel, yAxisLabel, pValue, series = [] }) 
         <Customized component={PlotFrame} />
         <Customized
           component={(props) => (
-            <AxisLabels {...props} xAxisLabel={xAxisLabel} yAxisLabel={yAxisLabel} />
+            <AxisLabels
+              {...props}
+              xAxisLabel={xAxisLabel}
+              yAxisLabel={yAxisLabel}
+              fontSize={fontSize}
+            />
           )}
         />
-        <Customized component={(props) => <PValueLabel {...props} pValue={pValue} />} />
+        <Customized component={(props) => <PValueLabel {...props} pValue={pValue} fontSize={fontSize} />} />
       </BarChart>
     </div>
   );
@@ -233,7 +239,7 @@ function PlotFrame({ offset }) {
   );
 }
 
-function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
+function AxisLabels({ offset, xAxisLabel, yAxisLabel, fontSize }) {
   if (!offset) {
     return null;
   }
@@ -242,10 +248,10 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
     <>
       <text
         x={offset.left + offset.width / 2}
-        y={offset.top + offset.height + 61}
+        y={offset.top + offset.height + Math.max(61, fontSize * 3.4)}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize={CHART_FONT_SIZE}
+        fontSize={fontSize}
         fontWeight="600"
         fontFamily={CHART_FONT_FAMILY}
       >
@@ -256,7 +262,7 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
         y={offset.top + offset.height / 2}
         textAnchor="middle"
         fill="#1f2937"
-        fontSize={CHART_FONT_SIZE}
+        fontSize={fontSize}
         fontWeight="600"
         fontFamily={CHART_FONT_FAMILY}
         transform={`rotate(-90 ${offset.left - 63} ${offset.top + offset.height / 2})`}
@@ -267,7 +273,30 @@ function AxisLabels({ offset, xAxisLabel, yAxisLabel }) {
   );
 }
 
-function PValueLabel({ width, pValue }) {
+function WrappedXAxisTick({ x, y, payload, fontSize }) {
+  const lines = wrapAxisText(payload?.value, 12, 2);
+  const lineHeight = Math.max(16, Math.round(fontSize * 0.95));
+
+  return (
+    <text
+      x={x}
+      y={y + 16}
+      textAnchor="middle"
+      fill="#1f2937"
+      fontSize={fontSize}
+      fontWeight="600"
+      fontFamily={CHART_FONT_FAMILY}
+    >
+      {lines.map((line, index) => (
+        <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : lineHeight}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
+function PValueLabel({ width, pValue, fontSize }) {
   if (!Number.isFinite(pValue)) {
     return null;
   }
@@ -278,7 +307,7 @@ function PValueLabel({ width, pValue }) {
       y={52}
       textAnchor="end"
       fill="#111827"
-      fontSize={CHART_FONT_SIZE}
+      fontSize={fontSize}
       fontWeight="600"
       fontFamily={CHART_FONT_FAMILY}
     >
@@ -322,6 +351,59 @@ function formatAxisTick(value, usesDecimalTicks) {
   }
 
   return String(Math.round(value));
+}
+
+function wrapAxisText(value, maxCharsPerLine, maxLines) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return [''];
+  }
+
+  const tokens = text
+    .replaceAll(/([/_-])/g, '$1 ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((token) => splitLongToken(token, maxCharsPerLine));
+  const lines = [];
+  let currentLine = '';
+
+  tokens.forEach((token) => {
+    const nextLine = currentLine ? `${currentLine} ${token}` : token;
+    if (nextLine.length <= maxCharsPerLine) {
+      currentLine = nextLine;
+      return;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    currentLine = token;
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  const limitedLines = lines.slice(0, maxLines);
+  const lastIndex = limitedLines.length - 1;
+  limitedLines[lastIndex] = `${limitedLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
+  return limitedLines;
+}
+
+function splitLongToken(token, maxCharsPerLine) {
+  if (token.length <= maxCharsPerLine) {
+    return [token];
+  }
+
+  const chunks = [];
+  for (let index = 0; index < token.length; index += maxCharsPerLine) {
+    chunks.push(token.slice(index, index + maxCharsPerLine));
+  }
+  return chunks;
 }
 
 function formatNumber(value) {

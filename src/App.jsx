@@ -24,6 +24,7 @@ const otherCropTips = [
 ];
 
 const SheetChart = lazy(() => import('./components/SheetChart'));
+const DEFAULT_SOIL_CHART_FONT_SIZE = 20;
 const TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
 const DEFAULT_GLOBAL_BAR_ORDER = ['CT-CC', 'CT-NC', 'RT-CC', 'RT-NC', 'Average'];
 const BAR_COLORS = {
@@ -137,6 +138,7 @@ function App() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [draggedBarId, setDraggedBarId] = useState('');
+  const [draggedColorBarId, setDraggedColorBarId] = useState('');
   const [draggedGlobalBarId, setDraggedGlobalBarId] = useState('');
   const [globalBarOrder, setGlobalBarOrder] = useState(DEFAULT_GLOBAL_BAR_ORDER);
   const [globalBarLabels, setGlobalBarLabels] = useState(createDefaultGlobalBarLabels());
@@ -193,6 +195,7 @@ function App() {
     setFileName('');
     setError(nextError);
     setDraggedBarId('');
+    setDraggedColorBarId('');
     setDraggedGlobalBarId('');
     setGlobalBarOrder(DEFAULT_GLOBAL_BAR_ORDER);
     setGlobalBarLabels(createDefaultGlobalBarLabels());
@@ -366,6 +369,16 @@ function App() {
     );
   };
 
+  const updateChartFontSize = (sheetName, value) => {
+    const nextFontSize = clampChartFontSize(value);
+
+    setSheets((currentSheets) =>
+      currentSheets.map((sheet) =>
+        sheet.name === sheetName ? { ...sheet, chartFontSize: nextFontSize } : sheet,
+      ),
+    );
+  };
+
   const updateBarLabel = (sheetName, rowId, value) => {
     setSheets((currentSheets) =>
       currentSheets.map((sheet) => {
@@ -380,6 +393,52 @@ function App() {
               ? { ...row, [sheet.xKey]: value }
               : row,
           ),
+        };
+      }),
+    );
+  };
+
+  const moveBarColor = (sheetName, sourceId, targetId) => {
+    if (!sourceId || !targetId || sourceId === targetId) {
+      return;
+    }
+
+    setSheets((currentSheets) =>
+      currentSheets.map((sheet) => {
+        if (sheet.name !== sheetName) {
+          return sheet;
+        }
+
+        const nextRows = [...sheet.rows];
+        const sourceIndex = nextRows.findIndex(
+          (row, index) => getRowId(row, index, sheet.xKey) === sourceId,
+        );
+        const targetIndex = nextRows.findIndex(
+          (row, index) => getRowId(row, index, sheet.xKey) === targetId,
+        );
+
+        if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+          return sheet;
+        }
+
+        const sourceRow = nextRows[sourceIndex];
+        const targetRow = nextRows[targetIndex];
+        const sourceFill = sourceRow.__barFill ?? getBarColor(sourceRow.__colorKey ?? sourceRow[sheet.xKey]);
+        const targetFill = targetRow.__barFill ?? getBarColor(targetRow.__colorKey ?? targetRow[sheet.xKey]);
+
+        return {
+          ...sheet,
+          rows: nextRows.map((row, index) => {
+            if (index === sourceIndex) {
+              return { ...row, __barFill: targetFill };
+            }
+
+            if (index === targetIndex) {
+              return { ...row, __barFill: sourceFill };
+            }
+
+            return row;
+          }),
         };
       }),
     );
@@ -541,6 +600,7 @@ function App() {
           xAxisLabel: sheet.xAxisLabel,
           yAxisLabel: sheet.yAxisLabel,
           pValue: sheet.pValue,
+          fontSize: sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE,
         });
 
         worksheet.getCell(`B${startRow}`).value = sheet.name;
@@ -925,6 +985,7 @@ function App() {
                             yAxisLabel={sheet.yAxisLabel}
                             pValue={sheet.pValue}
                             series={sheet.series}
+                            fontSize={sheet.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
                           />
                         </Suspense>
                       </div>
@@ -984,6 +1045,23 @@ function App() {
                       </label>
                     </div>
 
+                    <div className="chart-settings">
+                      <label className="font-size-control">
+                        <span>Graph text size</span>
+                        <input
+                          type="range"
+                          min="12"
+                          max="32"
+                          step="1"
+                          value={activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
+                          onChange={(event) =>
+                            updateChartFontSize(activeSheetData.name, event.target.value)
+                          }
+                        />
+                        <strong>{activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}px</strong>
+                      </label>
+                    </div>
+
                     {chartData.length ? (
                       <>
                         <div className="chart-actions">
@@ -1011,6 +1089,7 @@ function App() {
                               yAxisLabel={activeSheetData.yAxisLabel}
                               pValue={activeSheetData.pValue}
                               series={activeSheetData.series}
+                              fontSize={activeSheetData.chartFontSize ?? DEFAULT_SOIL_CHART_FONT_SIZE}
                             />
                           </Suspense>
                         </div>
@@ -1021,6 +1100,57 @@ function App() {
                               <div>
                                 <p className="sheet-kicker">Bar Controls</p>
                                 <h3>Edit labels and drag to reorder</h3>
+                              </div>
+                            </div>
+
+                            <div className="color-assignment">
+                              <div className="color-assignment-header">
+                                <p className="sheet-kicker">Bar Colors</p>
+                                <h3>Drag colors to reassign them</h3>
+                              </div>
+
+                              <div className="color-assignment-list" role="list">
+                                {chartData.map((bar) => (
+                                  <div
+                                    key={`${bar.id}-color`}
+                                    role="listitem"
+                                    className={
+                                      draggedColorBarId === bar.id
+                                        ? 'color-assignment-item dragging'
+                                        : 'color-assignment-item'
+                                    }
+                                    draggable
+                                    onDragStart={(event) => {
+                                      event.dataTransfer.effectAllowed = 'move';
+                                      event.dataTransfer.setData('text/plain', bar.id);
+                                      setDraggedColorBarId(bar.id);
+                                    }}
+                                    onDragOver={(event) => {
+                                      event.preventDefault();
+                                      event.dataTransfer.dropEffect = 'move';
+                                    }}
+                                    onDrop={(event) => {
+                                      event.preventDefault();
+                                      moveBarColor(
+                                        activeSheetData.name,
+                                        event.dataTransfer.getData('text/plain'),
+                                        bar.id,
+                                      );
+                                      setDraggedColorBarId('');
+                                    }}
+                                    onDragEnd={() => setDraggedColorBarId('')}
+                                  >
+                                    <span className="drag-handle" aria-hidden="true">
+                                      ::
+                                    </span>
+                                    <span
+                                      className="color-chip color-chip-large"
+                                      style={{ backgroundColor: bar.fill }}
+                                      aria-hidden="true"
+                                    />
+                                    <strong>{bar.category || 'Untitled Bar'}</strong>
+                                  </div>
+                                ))}
                               </div>
                             </div>
 
@@ -1181,16 +1311,24 @@ function buildChartData(sheet) {
         category,
         se: Number.isFinite(toNumber(row.se)) ? toNumber(row.se) : 0,
         value: numericValue,
-        fill: getBarColor(colorKey),
+        fill: row.__barFill ?? getBarColor(colorKey),
       };
     })
     .filter((row) => Number.isFinite(row.value));
 }
 
-async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue }) {
+async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue, fontSize = DEFAULT_SOIL_CHART_FONT_SIZE }) {
   const width = 520;
   const height = 420;
-  const svgMarkup = buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height });
+  const svgMarkup = buildExportChartSvg({
+    chartData,
+    xAxisLabel,
+    yAxisLabel,
+    pValue,
+    width,
+    height,
+    fontSize,
+  });
   const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`);
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -1208,9 +1346,9 @@ async function createChartPngDataUrl({ chartData, xAxisLabel, yAxisLabel, pValue
   return canvas.toDataURL('image/png');
 }
 
-function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height }) {
+function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width, height, fontSize }) {
   const chartFontFamily = '&quot;Space Grotesk&quot;, &quot;Segoe UI&quot;, sans-serif';
-  const margins = { top: 34, right: 24, bottom: 72, left: 78 };
+  const margins = { top: 34, right: 24, bottom: 96, left: 78 };
   const plotWidth = width - margins.left - margins.right;
   const plotHeight = height - margins.top - margins.bottom;
   const plotRight = margins.left + plotWidth;
@@ -1233,7 +1371,7 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
         <line x1="${centerX}" y1="${errorTop}" x2="${centerX}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorTop}" x2="${centerX + 10}" y2="${errorTop}" stroke="#111827" stroke-width="1.6" />
         <line x1="${centerX - 10}" y1="${errorBottom}" x2="${centerX + 10}" y2="${errorBottom}" stroke="#111827" stroke-width="1.6" />
-        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(entry.category)}</text>
+        <text x="${centerX}" y="${margins.top + plotHeight + 28}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${buildWrappedExportText(entry.category, centerX, Math.max(16, Math.round(fontSize * 0.95)))}</text>
       `;
     })
     .join('');
@@ -1243,7 +1381,7 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
       const y = margins.top + plotHeight - (tick / yAxisMax) * plotHeight;
 
       return `
-        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
+        <text x="${margins.left - 12}" y="${y + 5}" text-anchor="end" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${escapeXml(formatExportAxisTick(tick, usesDecimalTicks))}</text>
       `;
     })
     .join('');
@@ -1254,11 +1392,73 @@ function buildExportChartSvg({ chartData, xAxisLabel, yAxisLabel, pValue, width,
       <rect x="${margins.left}" y="${margins.top}" width="${plotWidth}" height="${plotHeight}" fill="none" stroke="#111827" stroke-width="1.4" />
       ${ticks}
       ${bars}
-      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
-      <text x="${margins.left + plotWidth / 2}" y="${height - 7}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
-      <text x="${margins.left - 57}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="20" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 57} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
+      <text x="${plotRight - 12}" y="${margins.top + 28}" text-anchor="end" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#111827">p = ${escapeXml(formatExportNumber(pValue))}</text>
+      <text x="${margins.left + plotWidth / 2}" y="${height - 7}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937">${escapeXml(xAxisLabel)}</text>
+      <text x="${margins.left - 57}" y="${margins.top + plotHeight / 2}" text-anchor="middle" font-family="${chartFontFamily}" font-size="${fontSize}" font-weight="600" fill="#1f2937" transform="rotate(-90 ${margins.left - 57} ${margins.top + plotHeight / 2})">${escapeXml(yAxisLabel)}</text>
     </svg>
   `;
+}
+
+function buildWrappedExportText(value, x, lineHeight) {
+  return wrapExportAxisText(value, 12, 2)
+    .map(
+      (line, index) =>
+        `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`,
+    )
+    .join('');
+}
+
+function wrapExportAxisText(value, maxCharsPerLine, maxLines) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return [''];
+  }
+
+  const tokens = text
+    .replaceAll(/([/_-])/g, '$1 ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((token) => splitExportLongToken(token, maxCharsPerLine));
+  const lines = [];
+  let currentLine = '';
+
+  tokens.forEach((token) => {
+    const nextLine = currentLine ? `${currentLine} ${token}` : token;
+    if (nextLine.length <= maxCharsPerLine) {
+      currentLine = nextLine;
+      return;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    currentLine = token;
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  const limitedLines = lines.slice(0, maxLines);
+  const lastIndex = limitedLines.length - 1;
+  limitedLines[lastIndex] = `${limitedLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`;
+  return limitedLines;
+}
+
+function splitExportLongToken(token, maxCharsPerLine) {
+  if (token.length <= maxCharsPerLine) {
+    return [token];
+  }
+
+  const chunks = [];
+  for (let index = 0; index < token.length; index += maxCharsPerLine) {
+    chunks.push(token.slice(index, index + maxCharsPerLine));
+  }
+  return chunks;
 }
 
 function getExportAxisScale(dataMax) {
@@ -2376,6 +2576,16 @@ function formatValue(value) {
   }
 
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function clampChartFontSize(value) {
+  const numericValue = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_SOIL_CHART_FONT_SIZE;
+  }
+
+  return Math.min(32, Math.max(12, numericValue));
 }
 
 function roundTo(value, decimals) {
