@@ -385,9 +385,10 @@ function App() {
 
   const updateAxisLabel = (sheetName, axis, value) => {
     setSheets((currentSheets) =>
-      currentSheets.map((sheet) =>
-        sheet.name === sheetName ? { ...sheet, [axis]: value } : sheet,
-      ),
+      currentSheets.map((sheet) => ({
+        ...sheet,
+        [axis]: value,
+      })),
     );
   };
 
@@ -950,25 +951,25 @@ function App() {
 
                       <div className="axis-controls">
                         <label>
-                          <span>X-axis name</span>
+                          <span>Universal X-axis name</span>
                           <input
                             type="text"
                             value={sheet.xAxisLabel}
                             onChange={(event) =>
                               updateAxisLabel(sheet.name, 'xAxisLabel', event.target.value)
                             }
-                            placeholder="Enter X-axis label"
+                            placeholder="Enter X-axis label for all charts"
                           />
                         </label>
                         <label>
-                          <span>Y-axis name</span>
+                          <span>Universal Y-axis name</span>
                           <input
                             type="text"
                             value={sheet.yAxisLabel}
                             onChange={(event) =>
                               updateAxisLabel(sheet.name, 'yAxisLabel', event.target.value)
                             }
-                            placeholder="Enter Y-axis label"
+                            placeholder="Enter Y-axis label for all charts"
                           />
                         </label>
                       </div>
@@ -1040,25 +1041,25 @@ function App() {
 
                     <div className="axis-controls">
                       <label>
-                        <span>X-axis name</span>
+                        <span>Universal X-axis name</span>
                         <input
                           type="text"
                           value={activeSheetData.xAxisLabel}
                           onChange={(event) =>
                             updateAxisLabel(activeSheetData.name, 'xAxisLabel', event.target.value)
                           }
-                          placeholder="Enter X-axis label"
+                          placeholder="Enter X-axis label for all charts"
                         />
                       </label>
                       <label>
-                        <span>Y-axis name</span>
+                        <span>Universal Y-axis name</span>
                         <input
                           type="text"
                           value={activeSheetData.yAxisLabel}
                           onChange={(event) =>
                             updateAxisLabel(activeSheetData.name, 'yAxisLabel', event.target.value)
                           }
-                          placeholder="Enter Y-axis label"
+                          placeholder="Enter Y-axis label for all charts"
                         />
                       </label>
                     </div>
