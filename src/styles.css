@@ -324,7 +324,7 @@ select {
 
 .chart-card {
   padding: 18px 12px 10px;
-  min-height: 460px;
+  min-height: 740px;
 }
 
 .chart-actions {
@@ -591,6 +591,8 @@ select {
 }
 
 .chart-settings {
+  display: grid;
+  gap: 12px;
   margin-bottom: 20px;
 }
 

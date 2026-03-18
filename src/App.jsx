@@ -26,6 +26,25 @@ const otherCropTips = [
 ];
 
 const DEFAULT_SOIL_CHART_FONT_SIZE = 20;
+const DEFAULT_CHART_TEXT_SETTINGS = {
+  tickFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  yAxisTitleFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  legendFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  pValueFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleOffset: 0,
+  yAxisTitleOffset: 0,
+};
+const CHART_TEXT_CONTROL_FIELDS = [
+  { key: 'tickFontSize', label: 'Axis tick labels', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'xAxisTitleFontSize', label: 'X-axis title', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'yAxisTitleFontSize', label: 'Y-axis title', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'legendFontSize', label: 'Legend', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'pValueFontSize', label: 'P-value', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'xAxisTitleOffset', label: 'X-axis title position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
+  { key: 'yAxisTitleOffset', label: 'Y-axis title position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
+];
+const EXPORT_CHART_PADDING = 32;
 const TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
 const DEFAULT_GLOBAL_BAR_ORDER = ['CT-CC', 'CT-NC', 'RT-CC', 'RT-NC', 'Average'];
 const BAR_COLORS = {
@@ -138,8 +157,7 @@ function App() {
   const [activeSheet, setActiveSheet] = useState('');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
-  const [soilChartFontSize, setSoilChartFontSize] = useState(DEFAULT_SOIL_CHART_FONT_SIZE);
-  const [soilYAxisFontSize, setSoilYAxisFontSize] = useState(DEFAULT_SOIL_CHART_FONT_SIZE);
+  const [chartTextSettings, setChartTextSettings] = useState(DEFAULT_CHART_TEXT_SETTINGS);
   const [draggedBarId, setDraggedBarId] = useState('');
   const [draggedColorBarId, setDraggedColorBarId] = useState('');
   const [draggedGlobalBarId, setDraggedGlobalBarId] = useState('');
@@ -197,8 +215,7 @@ function App() {
     setYieldFarmData({});
     setFileName('');
     setError(nextError);
-    setSoilChartFontSize(DEFAULT_SOIL_CHART_FONT_SIZE);
-    setSoilYAxisFontSize(DEFAULT_SOIL_CHART_FONT_SIZE);
+    setChartTextSettings(DEFAULT_CHART_TEXT_SETTINGS);
     setDraggedBarId('');
     setDraggedColorBarId('');
     setDraggedGlobalBarId('');
@@ -374,12 +391,12 @@ function App() {
     );
   };
 
-  const updateChartFontSize = (value) => {
-    setSoilChartFontSize(clampChartFontSize(value));
-  };
-
-  const updateYAxisFontSize = (value) => {
-    setSoilYAxisFontSize(clampChartFontSize(value));
+  const updateChartTextSetting = (key, value) => {
+    const field = CHART_TEXT_CONTROL_FIELDS.find((item) => item.key === key);
+    setChartTextSettings((currentSettings) => ({
+      ...currentSettings,
+      [key]: clampChartControlValue(value, field),
+    }));
   };
 
   const updateBarLabel = (sheetName, rowId, value) => {
@@ -597,15 +614,8 @@ function App() {
       let startRow = rawSheetSnapshot.rows.length + 3;
 
       for (const sheet of exportableSheets) {
-        const exportChartData = buildChartData(sheet);
-        const chartImage = await createChartPngDataUrl({
-          chartData: exportChartData,
-          xAxisLabel: sheet.xAxisLabel,
-          yAxisLabel: sheet.yAxisLabel,
-          pValue: sheet.pValue,
-          series: sheet.series,
-          fontSize: soilChartFontSize,
-          yAxisFontSize: soilYAxisFontSize,
+        const chartImage = await createWorkbookChartImage(sheet, {
+          chartTextSettings,
         });
 
         worksheet.getCell(`B${startRow}`).value = sheet.name;
@@ -963,6 +973,11 @@ function App() {
                         </label>
                       </div>
 
+                      <ChartTextControls
+                        settings={chartTextSettings}
+                        onChange={updateChartTextSetting}
+                      />
+
                       <div className="chart-actions">
                         <button
                           type="button"
@@ -989,8 +1004,7 @@ function App() {
                           yAxisLabel={sheet.yAxisLabel}
                           pValue={sheet.pValue}
                           series={sheet.series}
-                          fontSize={soilChartFontSize}
-                          yAxisFontSize={soilYAxisFontSize}
+                          {...chartTextSettings}
                         />
                       </div>
                     </div>
@@ -1049,32 +1063,10 @@ function App() {
                       </label>
                     </div>
 
-                    <div className="chart-settings">
-                      <label className="font-size-control">
-                        <span>Universal graph text size</span>
-                        <input
-                          type="range"
-                          min="12"
-                          max="32"
-                          step="1"
-                          value={soilChartFontSize}
-                          onChange={(event) => updateChartFontSize(event.target.value)}
-                        />
-                        <strong>{soilChartFontSize}px</strong>
-                      </label>
-                      <label className="font-size-control">
-                        <span>Universal Y-axis title size</span>
-                        <input
-                          type="range"
-                          min="12"
-                          max="32"
-                          step="1"
-                          value={soilYAxisFontSize}
-                          onChange={(event) => updateYAxisFontSize(event.target.value)}
-                        />
-                        <strong>{soilYAxisFontSize}px</strong>
-                      </label>
-                    </div>
+                    <ChartTextControls
+                      settings={chartTextSettings}
+                      onChange={updateChartTextSetting}
+                    />
 
                     {chartData.length ? (
                       <>
@@ -1102,8 +1094,7 @@ function App() {
                             yAxisLabel={activeSheetData.yAxisLabel}
                             pValue={activeSheetData.pValue}
                             series={activeSheetData.series}
-                            fontSize={soilChartFontSize}
-                            yAxisFontSize={soilYAxisFontSize}
+                            {...chartTextSettings}
                           />
                         </div>
 
@@ -1206,7 +1197,7 @@ function App() {
                                     <span>Bar label</span>
                                     <input
                                       type="text"
-                                      value={bar.category}
+                                      value={bar.editLabel}
                                       onChange={(event) =>
                                         updateBarLabel(activeSheetData.name, bar.id, event.target.value)
                                       }
@@ -1239,6 +1230,42 @@ function App() {
   );
 }
 
+function ChartTextControls({ settings, onChange }) {
+  return (
+    <div className="chart-settings">
+      {CHART_TEXT_CONTROL_FIELDS.map((field) => (
+        <label key={field.key} className="font-size-control">
+          <span>{field.label}</span>
+          <input
+            type="range"
+            min={field.min}
+            max={field.max}
+            step="1"
+            value={settings[field.key]}
+            onChange={(event) => onChange(field.key, event.target.value)}
+          />
+          <strong>{settings[field.key]}{field.unit}</strong>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+async function createWorkbookChartImage(
+  sheet,
+  { chartTextSettings },
+) {
+  const exportChartData = buildChartData(sheet);
+  return createChartPngDataUrl({
+    chartData: exportChartData,
+    xAxisLabel: sheet.xAxisLabel,
+    yAxisLabel: sheet.yAxisLabel,
+    pValue: sheet.pValue,
+    series: sheet.series,
+    ...chartTextSettings,
+  });
+}
+
 async function exportChartAsJpeg(container, fileName) {
   const { dataUrl } = await createChartImageDataUrl(container, {
     mimeType: 'image/jpeg',
@@ -1255,6 +1282,7 @@ function buildChartData(sheet) {
     return sheet.rows.map((row, index) => ({
       id: getRowId(row, index, sheet.xKey),
       category: getDisplayLabel(row, index, sheet.xKey),
+      editLabel: String(row[sheet.xKey] ?? ''),
       colorKey: row.__colorKey ?? getDisplayLabel(row, index, sheet.xKey),
       fill: getBarColor(row.__colorKey ?? getDisplayLabel(row, index, sheet.xKey)),
       ...sheet.series.reduce(
@@ -1281,6 +1309,7 @@ function buildChartData(sheet) {
       return {
         id: getRowId(row, index, sheet.xKey),
         category,
+        editLabel: String(row[sheet.xKey] ?? ''),
         se: Number.isFinite(toNumber(row.se)) ? toNumber(row.se) : 0,
         value: numericValue,
         fill: row.__barFill ?? getBarColor(colorKey),
@@ -1295,8 +1324,13 @@ async function createChartPngDataUrl({
   yAxisLabel,
   pValue,
   series = [],
-  fontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
-  yAxisFontSize = fontSize,
+  tickFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  yAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  legendFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  pValueFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleOffset = 0,
+  yAxisTitleOffset = 0,
 }) {
   return renderChartForExport({
     chartData,
@@ -1304,8 +1338,13 @@ async function createChartPngDataUrl({
     yAxisLabel,
     pValue,
     series,
-    fontSize,
-    yAxisFontSize,
+    tickFontSize,
+    xAxisTitleFontSize,
+    yAxisTitleFontSize,
+    legendFontSize,
+    pValueFontSize,
+    xAxisTitleOffset,
+    yAxisTitleOffset,
   });
 }
 
@@ -1315,8 +1354,13 @@ async function renderChartForExport({
   yAxisLabel,
   pValue,
   series = [],
-  fontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
-  yAxisFontSize = fontSize,
+  tickFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  yAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  legendFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  pValueFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTitleOffset = 0,
+  yAxisTitleOffset = 0,
 }) {
   const host = document.createElement('div');
   host.className = 'chart-export-surface';
@@ -1341,8 +1385,13 @@ async function renderChartForExport({
           yAxisLabel={yAxisLabel}
           pValue={pValue}
           series={series}
-          fontSize={fontSize}
-          yAxisFontSize={yAxisFontSize}
+          tickFontSize={tickFontSize}
+          xAxisTitleFontSize={xAxisTitleFontSize}
+          yAxisTitleFontSize={yAxisTitleFontSize}
+          legendFontSize={legendFontSize}
+          pValueFontSize={pValueFontSize}
+          xAxisTitleOffset={xAxisTitleOffset}
+          yAxisTitleOffset={yAxisTitleOffset}
           disableAnimation
         />
       </div>,
@@ -1418,6 +1467,10 @@ async function createChartCanvas(container) {
     const image = await loadImage(url);
     context.drawImage(
       image,
+      contentLayout.svg.sourceX,
+      contentLayout.svg.sourceY,
+      contentLayout.svg.sourceWidth,
+      contentLayout.svg.sourceHeight,
       contentLayout.svg.x,
       contentLayout.svg.y,
       contentLayout.svg.width,
@@ -1431,15 +1484,22 @@ async function createChartCanvas(container) {
 }
 
 function getChartContentLayout(container, svg) {
-  const svgRect = svg.getBoundingClientRect();
+  const svgContent = getSvgContentLayout(svg);
   const legend = getChartLegendLayout(container);
-  const svgWidth = Math.max(1, Math.ceil(svgRect.width || svg.viewBox.baseVal.width || svg.clientWidth || 1));
-  const svgHeight = Math.max(1, Math.ceil(svgRect.height || svg.viewBox.baseVal.height || svg.clientHeight || 1));
-  const width = Math.ceil(Math.max(svgWidth, legend?.width ?? 0));
-  const top = legend ? Math.min(legend.top, svgRect.top) : svgRect.top;
-  const height = Math.ceil(svgRect.bottom - top);
-  const svgX = Math.round((width - svgWidth) / 2);
-  const svgY = Math.round(svgRect.top - top);
+  const contentLeft = Math.min(svgContent.left, legend?.left ?? svgContent.left);
+  const contentTop = Math.min(svgContent.top, legend?.top ?? svgContent.top);
+  const contentRight = Math.max(
+    svgContent.left + svgContent.width,
+    legend ? legend.left + legend.width : svgContent.left + svgContent.width,
+  );
+  const contentBottom = Math.max(
+    svgContent.top + svgContent.height,
+    legend ? legend.top + legend.height : svgContent.top + svgContent.height,
+  );
+  const width = Math.ceil(contentRight - contentLeft + EXPORT_CHART_PADDING * 2);
+  const height = Math.ceil(contentBottom - contentTop + EXPORT_CHART_PADDING * 2);
+  const svgX = Math.round(EXPORT_CHART_PADDING + svgContent.left - contentLeft);
+  const svgY = Math.round(EXPORT_CHART_PADDING + svgContent.top - contentTop);
 
   return {
     width,
@@ -1447,20 +1507,96 @@ function getChartContentLayout(container, svg) {
     svg: {
       x: svgX,
       y: svgY,
-      width: svgWidth,
-      height: svgHeight,
+      width: Math.ceil(svgContent.width),
+      height: Math.ceil(svgContent.height),
+      sourceX: svgContent.sourceX,
+      sourceY: svgContent.sourceY,
+      sourceWidth: svgContent.sourceWidth,
+      sourceHeight: svgContent.sourceHeight,
     },
     legend: legend
       ? {
-          width: legend.width,
           items: legend.items.map((item) => ({
             ...item,
-            swatchX: Math.round(item.swatchX + (width - legend.width) / 2),
-            textX: Math.round(item.textX + (width - legend.width) / 2),
+            swatchX: Math.round(EXPORT_CHART_PADDING + legend.left - contentLeft + item.swatchX),
+            swatchY: Math.round(EXPORT_CHART_PADDING + legend.top - contentTop + item.swatchY),
+            textX: Math.round(EXPORT_CHART_PADDING + legend.left - contentLeft + item.textX),
+            textY: Math.round(EXPORT_CHART_PADDING + legend.top - contentTop + item.textY),
           })),
         }
       : null,
   };
+}
+
+function getSvgContentLayout(svg) {
+  const svgRect = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox?.baseVal;
+  const sourceWidth = viewBox?.width || svg.width.baseVal.value || svg.clientWidth || svgRect.width || 1;
+  const sourceHeight = viewBox?.height || svg.height.baseVal.value || svg.clientHeight || svgRect.height || 1;
+  const scaleX = svgRect.width / sourceWidth || 1;
+  const scaleY = svgRect.height / sourceHeight || 1;
+  const contentRect = getRenderedSvgContentRect(svg, svgRect);
+  const sourceX = Math.max(0, Math.floor((contentRect.left - svgRect.left) / scaleX));
+  const sourceY = Math.max(0, Math.floor((contentRect.top - svgRect.top) / scaleY));
+  const sourceRight = Math.min(sourceWidth, Math.ceil((contentRect.right - svgRect.left) / scaleX));
+  const sourceBottom = Math.min(sourceHeight, Math.ceil((contentRect.bottom - svgRect.top) / scaleY));
+  const croppedSourceWidth = Math.max(1, sourceRight - sourceX);
+  const croppedSourceHeight = Math.max(1, sourceBottom - sourceY);
+
+  return {
+    left: contentRect.left,
+    top: contentRect.top,
+    width: contentRect.right - contentRect.left,
+    height: contentRect.bottom - contentRect.top,
+    sourceX,
+    sourceY,
+    sourceWidth: croppedSourceWidth,
+    sourceHeight: croppedSourceHeight,
+  };
+}
+
+function getRenderedSvgContentRect(svg, svgRect) {
+  const elements = [...svg.querySelectorAll('*')].filter((element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (['defs', 'clippath', 'title', 'desc'].includes(tagName)) {
+      return false;
+    }
+
+    if (element.closest('defs, clipPath')) {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+
+  if (!elements.length) {
+    return {
+      left: svgRect.left,
+      top: svgRect.top,
+      right: svgRect.right,
+      bottom: svgRect.bottom,
+    };
+  }
+
+  return elements.reduce(
+    (bounds, element) => {
+      const rect = element.getBoundingClientRect();
+
+      return {
+        left: Math.min(bounds.left, rect.left),
+        top: Math.min(bounds.top, rect.top),
+        right: Math.max(bounds.right, rect.right),
+        bottom: Math.max(bounds.bottom, rect.bottom),
+      };
+    },
+    {
+      left: Number.POSITIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    },
+  );
 }
 
 function serializeChartSvg(svg) {
@@ -1515,8 +1651,10 @@ function getChartLegendLayout(container) {
   });
 
   return {
+    left: legendRect.left,
     top: legendRect.top,
     width: Math.ceil(legendRect.width),
+    height: Math.ceil(legendRect.height),
     items,
   };
 }
@@ -2561,6 +2699,16 @@ function clampChartFontSize(value) {
   }
 
   return Math.min(32, Math.max(12, numericValue));
+}
+
+function clampChartControlValue(value, field) {
+  const numericValue = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(numericValue)) {
+    return field?.defaultValue ?? 0;
+  }
+
+  return Math.min(field?.max ?? numericValue, Math.max(field?.min ?? numericValue, numericValue));
 }
 
 function roundTo(value, decimals) {

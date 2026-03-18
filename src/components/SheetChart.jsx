@@ -11,8 +11,8 @@ import {
 
 const CHART_FONT_FAMILY = '"Space Grotesk", "Segoe UI", sans-serif';
 const DEFAULT_CHART_FONT_SIZE = 20;
-const BASE_CHART_WIDTH = 580;
-const BASE_PLOT_HEIGHT = 300;
+const BASE_CHART_WIDTH = 760;
+const BASE_PLOT_HEIGHT = 520;
 const RIGHT_MARGIN = 32;
 const TOP_MARGIN = 34;
 const MIN_SINGLE_BAND_WIDTH = 74;
@@ -20,6 +20,7 @@ const MIN_GROUPED_BAND_WIDTH = 88;
 const Y_AXIS_TITLE_GAP = 18;
 const Y_AXIS_TICK_GAP = 12;
 const X_AXIS_TITLE_GAP = 16;
+const X_AXIS_TICK_ROTATION = -28;
 
 function SheetChart({
   chartData,
@@ -27,8 +28,13 @@ function SheetChart({
   yAxisLabel,
   pValue,
   series = [],
-  fontSize = DEFAULT_CHART_FONT_SIZE,
-  yAxisFontSize = fontSize,
+  tickFontSize = DEFAULT_CHART_FONT_SIZE,
+  xAxisTitleFontSize = DEFAULT_CHART_FONT_SIZE,
+  yAxisTitleFontSize = DEFAULT_CHART_FONT_SIZE,
+  legendFontSize = DEFAULT_CHART_FONT_SIZE,
+  pValueFontSize = DEFAULT_CHART_FONT_SIZE,
+  xAxisTitleOffset = 0,
+  yAxisTitleOffset = 0,
   disableAnimation = false,
 }) {
   const safeChartData = Array.isArray(chartData) ? chartData : [];
@@ -44,31 +50,39 @@ function SheetChart({
   const { max: yAxisMax, ticks: yAxisTicks, usesDecimalTicks } = getAxisScale(chartMax);
   const plotHeight = BASE_PLOT_HEIGHT;
   const yAxisTickWidth = Math.max(
-    ...yAxisTicks.map((tick) => measureTextWidth(formatAxisTick(tick, usesDecimalTicks), fontSize)),
-    measureTextWidth(formatAxisTick(yAxisMax, usesDecimalTicks), fontSize),
+    ...yAxisTicks.map((tick) => measureTextWidth(formatAxisTick(tick, usesDecimalTicks), tickFontSize)),
+    measureTextWidth(formatAxisTick(yAxisMax, usesDecimalTicks), tickFontSize),
   );
   const yAxisWidth = Math.max(58, Math.ceil(yAxisTickWidth + 18));
-  const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
-  const maxYAxisLineLength = Math.max(plotHeight - 12, yAxisFontSize);
-  const yAxisLines = wrapAxisText(yAxisLabel, maxYAxisLineLength, yAxisFontSize);
+  const yAxisLineStep = Math.max(18, Math.round(yAxisTitleFontSize * 1.1));
+  const maxYAxisLineLength = Math.max(plotHeight - 12, yAxisTitleFontSize);
+  const yAxisLines = wrapAxisText(yAxisLabel, maxYAxisLineLength, yAxisTitleFontSize);
   const yAxisTitleWidth = Math.max(yAxisLineStep, yAxisLines.length * yAxisLineStep);
-  const leftMargin = Math.max(24, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP));
+  const baseLeftMargin = Math.max(24, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP));
+  const leftMargin = Math.max(baseLeftMargin, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP + Math.max(0, -yAxisTitleOffset)));
   const minBandWidth = isGrouped ? MIN_GROUPED_BAND_WIDTH : MIN_SINGLE_BAND_WIDTH;
-  const chartWidth = Math.max(
-    BASE_CHART_WIDTH,
-    Math.ceil(leftMargin + yAxisWidth + RIGHT_MARGIN + Math.max(safeChartData.length, 1) * minBandWidth),
+  const minPlotWidth = Math.max(220, BASE_CHART_WIDTH - baseLeftMargin - yAxisWidth - RIGHT_MARGIN);
+  const xAxisLineHeight = Math.max(16, Math.round(tickFontSize * 0.95));
+  const baseTickWrapWidth = Math.max(28, minBandWidth - (isGrouped ? 10 : 8));
+  const estimatedTickLines = safeChartData.map((entry) => wrapAxisText(entry.category, baseTickWrapWidth, tickFontSize));
+  const requiredBandWidth = Math.max(
+    minBandWidth,
+    ...estimatedTickLines.map((lines) => getRotatedLabelFootprint(lines, tickFontSize, xAxisLineHeight).width + 18),
   );
-  const plotWidth = Math.max(220, chartWidth - leftMargin - yAxisWidth - RIGHT_MARGIN);
+  const plotWidth = Math.max(minPlotWidth, Math.max(safeChartData.length, 1) * requiredBandWidth);
+  const chartWidth = Math.ceil(leftMargin + yAxisWidth + RIGHT_MARGIN + plotWidth);
   const bandWidth = safeChartData.length ? plotWidth / safeChartData.length : plotWidth;
   const tickWrapWidth = Math.max(28, bandWidth - (isGrouped ? 10 : 8));
-  const xAxisTickLines = safeChartData.map((entry) => wrapAxisText(entry.category, tickWrapWidth, fontSize));
-  const xAxisLineHeight = Math.max(16, Math.round(fontSize * 0.95));
-  const maxXAxisLines = Math.max(...xAxisTickLines.map((lines) => lines.length), 1);
-  const xAxisHeight = Math.max(fontSize + 12, maxXAxisLines * xAxisLineHeight + 10);
-  const xAxisTitleLines = wrapAxisText(xAxisLabel, Math.max(plotWidth - 16, 40), fontSize);
-  const xAxisTitleLineHeight = Math.max(18, Math.round(fontSize * 1.1));
+  const xAxisTickLines = safeChartData.map((entry) => wrapAxisText(entry.category, tickWrapWidth, tickFontSize));
+  const maxXAxisTickHeight = Math.max(
+    ...xAxisTickLines.map((lines) => getRotatedLabelFootprint(lines, tickFontSize, xAxisLineHeight).height),
+    tickFontSize,
+  );
+  const xAxisHeight = Math.max(tickFontSize + 12, Math.ceil(maxXAxisTickHeight) + 14);
+  const xAxisTitleLines = wrapAxisText(xAxisLabel, Math.max(plotWidth - 16, 40), xAxisTitleFontSize);
+  const xAxisTitleLineHeight = Math.max(18, Math.round(xAxisTitleFontSize * 1.1));
   const xAxisTitleHeight = xAxisLabel ? xAxisTitleLines.length * xAxisTitleLineHeight : 0;
-  const bottomMargin = Math.max(48, xAxisHeight + xAxisTitleHeight + X_AXIS_TITLE_GAP);
+  const bottomMargin = Math.max(48, xAxisHeight + xAxisTitleHeight + X_AXIS_TITLE_GAP + Math.max(0, xAxisTitleOffset));
   const chartHeight = TOP_MARGIN + plotHeight + bottomMargin;
   const margins = { top: TOP_MARGIN, right: RIGHT_MARGIN, left: leftMargin, bottom: bottomMargin };
   const seriesMap = Object.fromEntries(
@@ -81,7 +95,11 @@ function SheetChart({
   return (
     <div className="chart-scroll">
       {isGrouped ? (
-        <div className="chart-legend" aria-hidden="true">
+        <div
+          className="chart-legend"
+          aria-hidden="true"
+          style={{ fontSize: `${legendFontSize}px` }}
+        >
           {series.map((item) => (
             <div key={item.key} className="chart-legend-item">
               <span className={`chart-legend-swatch ${getLegendSwatchClass(item.key)}`} />
@@ -109,9 +127,9 @@ function SheetChart({
           tick={(props) => (
             <WrappedXAxisTick
               {...props}
-              fontSize={fontSize}
+              fontSize={tickFontSize}
               lineHeight={xAxisLineHeight}
-              lines={xAxisTickLines[props.index] ?? wrapAxisText(props.payload?.value, tickWrapWidth, fontSize)}
+              lines={xAxisTickLines[props.index] ?? wrapAxisText(props.payload?.value, tickWrapWidth, tickFontSize)}
             />
           )}
         />
@@ -121,7 +139,7 @@ function SheetChart({
           axisLine={false}
           tick={{
             fill: '#1f2937',
-            fontSize,
+            fontSize: tickFontSize,
             fontWeight: 600,
             fontFamily: CHART_FONT_FAMILY,
           }}
@@ -198,12 +216,15 @@ function SheetChart({
               xAxisTickHeight={xAxisHeight}
               xAxisTitleLineHeight={xAxisTitleLineHeight}
               yAxisLines={yAxisLines}
-              yAxisFontSize={yAxisFontSize}
+              xAxisTitleFontSize={xAxisTitleFontSize}
+              yAxisTitleFontSize={yAxisTitleFontSize}
+              xAxisTitleOffset={xAxisTitleOffset}
+              yAxisTitleOffset={yAxisTitleOffset}
               yAxisWidth={yAxisWidth}
             />
           )}
         />
-        <Customized component={(props) => <PValueLabel {...props} pValue={pValue} fontSize={fontSize} />} />
+        <Customized component={(props) => <PValueLabel {...props} pValue={pValue} fontSize={pValueFontSize} />} />
       </BarChart>
     </div>
   );
@@ -308,18 +329,21 @@ function AxisLabels({
   xAxisTickHeight,
   xAxisTitleLineHeight,
   yAxisLines,
-  yAxisFontSize,
+  xAxisTitleFontSize,
+  yAxisTitleFontSize,
+  xAxisTitleOffset,
+  yAxisTitleOffset,
   yAxisWidth,
 }) {
   if (!offset) {
     return null;
   }
 
-  const yAxisLineStep = Math.max(18, Math.round(yAxisFontSize * 1.1));
+  const yAxisLineStep = Math.max(18, Math.round(yAxisTitleFontSize * 1.1));
   const yAxisTitleWidth = Math.max(yAxisLineStep, offset.left - yAxisWidth - Y_AXIS_TICK_GAP);
-  const yAxisBaseX = Math.max(yAxisLineStep / 2, yAxisTitleWidth - yAxisLineStep / 2);
+  const yAxisBaseX = Math.max(yAxisLineStep / 2, yAxisTitleWidth - yAxisLineStep / 2) + yAxisTitleOffset;
   const yAxisBaseY = offset.top + offset.height / 2;
-  const xAxisLabelY = offset.top + offset.height + xAxisTickHeight + xAxisTitleLineHeight - 4;
+  const xAxisLabelY = offset.top + offset.height + xAxisTickHeight + xAxisTitleLineHeight - 4 + xAxisTitleOffset;
   const orderedYAxisLines = [...yAxisLines].reverse();
 
   return (
@@ -330,7 +354,7 @@ function AxisLabels({
           y={xAxisLabelY}
           textAnchor="middle"
           fill="#1f2937"
-          fontSize={xAxisTitleLineHeight}
+          fontSize={xAxisTitleFontSize}
           fontWeight="600"
           fontFamily={CHART_FONT_FAMILY}
         >
@@ -352,7 +376,7 @@ function AxisLabels({
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#1f2937"
-            fontSize={yAxisFontSize}
+            fontSize={yAxisTitleFontSize}
             fontWeight="600"
             fontFamily={CHART_FONT_FAMILY}
             transform={`rotate(-90 ${lineX} ${yAxisBaseY})`}
@@ -371,10 +395,12 @@ function WrappedXAxisTick({ x, y, lines, fontSize, lineHeight }) {
       x={x}
       y={y + 12}
       textAnchor="middle"
+      dominantBaseline="hanging"
       fill="#1f2937"
       fontSize={fontSize}
       fontWeight="600"
       fontFamily={CHART_FONT_FAMILY}
+      transform={`rotate(${X_AXIS_TICK_ROTATION} ${x} ${y + 12})`}
     >
       {lines.map((line, index) => (
         <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : lineHeight}>
@@ -385,6 +411,16 @@ function WrappedXAxisTick({ x, y, lines, fontSize, lineHeight }) {
   );
 }
 
+function getRotatedLabelFootprint(lines, fontSize, lineHeight) {
+  const rotationRadians = Math.abs(X_AXIS_TICK_ROTATION) * (Math.PI / 180);
+  const maxLineWidth = Math.max(...lines.map((line) => measureTextWidth(line, fontSize)), 0);
+  const stackedHeight = Math.max(lines.length, 1) * lineHeight;
+  const width = Math.cos(rotationRadians) * maxLineWidth + Math.sin(rotationRadians) * stackedHeight;
+  const height = Math.sin(rotationRadians) * maxLineWidth + Math.cos(rotationRadians) * stackedHeight;
+
+  return { width, height };
+}
+
 function PValueLabel({ offset, pValue, fontSize }) {
   if (!offset || !Number.isFinite(pValue)) {
     return null;
@@ -393,7 +429,7 @@ function PValueLabel({ offset, pValue, fontSize }) {
   return (
     <text
       x={offset.left + offset.width - 10}
-      y={offset.top + 18}
+      y={offset.top + 28}
       textAnchor="end"
       fill="#111827"
       fontSize={fontSize}
