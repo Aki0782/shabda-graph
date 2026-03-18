@@ -8,11 +8,11 @@ const DATASET_OPTIONS = [
 ];
 
 const sampleTips = [
-  'Each numeric column in the raw workbook becomes its own chart tab.',
-  'Every bar is calculated from a 4-row group inside that column.',
-  'SE is calculated as the standard deviation of each 4-value group divided by 2.',
-  'P value is calculated using one-way ANOVA across the 4 groups in the column.',
-  'Bar labels can be edited and the bar order can be changed with drag and drop.',
+  'Each mapped soil metric in the workbook becomes its own chart tab.',
+  'Soil mode groups rows by detected treatment labels when they are present and falls back to sequential 4-row groups when they are not.',
+  'SE is calculated from the replicate values inside each detected treatment group.',
+  'P value is calculated using one-way ANOVA across the detected treatment groups for each metric.',
+  'Bar labels, order, and colors can be edited across every soil chart.',
 ];
 const yieldTips = [
   'Potato mode creates a grouped Potato Yield chart and a Market Yield chart when the marketable column is present.',
@@ -45,15 +45,52 @@ const CHART_TEXT_CONTROL_FIELDS = [
   { key: 'yAxisTitleOffset', label: 'Y-axis title position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
 ];
 const EXPORT_CHART_PADDING = 32;
-const TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
+const LEGACY_TREATMENT_LABELS = ['RT-CC', 'CT-CC', 'CT-NC', 'RT-NC', 'Average'];
 const DEFAULT_GLOBAL_BAR_ORDER = ['CT-CC', 'CT-NC', 'RT-CC', 'RT-NC', 'Average'];
+const DEFAULT_SOIL_TREATMENT_ORDER = [
+  'CT-Barley-NFC',
+  'CT-Barley-FC',
+  'RT-Barley-FC',
+  'RT-Barley-NFC',
+  'RT-McCains-NFC',
+  'RT-McCains-FC',
+  'CT-McCains-FC',
+  'CT-McCains-NFC',
+];
+const SOIL_TREATMENT_FIELD_CANDIDATES = [
+  'Treatment description code if any',
+  'farm_id',
+  'treatment',
+  'Treatment',
+  'plot_group',
+];
 const BAR_COLORS = {
   'CT-CC': '#6AA84F',
   'CT-NC': '#1F6B3A',
   'RT-CC': '#AFCFE6',
   'RT-NC': '#3E93C4',
+  'CT-Barley-NFC': '#6AA84F',
+  'CT-Barley-FC': '#38761D',
+  'RT-Barley-FC': '#AFCFE6',
+  'RT-Barley-NFC': '#3E93C4',
+  'RT-McCains-NFC': '#F6C85F',
+  'RT-McCains-FC': '#F29E4C',
+  'CT-McCains-FC': '#E07A5F',
+  'CT-McCains-NFC': '#9C6644',
   Average: '#6B7280',
 };
+const BAR_COLOR_PALETTE = [
+  '#6AA84F',
+  '#38761D',
+  '#AFCFE6',
+  '#3E93C4',
+  '#F6C85F',
+  '#F29E4C',
+  '#E07A5F',
+  '#9C6644',
+  '#C8553D',
+  '#7A6FF0',
+];
 const Y_AXIS_LABELS = {
   OM: 'Organic Matter (%)',
   CEC: 'Cation Exchange Capacity (meq/100 g)',
@@ -283,11 +320,12 @@ function App() {
           ...sheet,
           rows: orderRowsByTreatment(sheet.rows, DEFAULT_GLOBAL_BAR_ORDER),
         }));
+        const soilBarSettings = getGlobalBarSettingsFromSheets(orderedSheets);
 
         setSheets(orderedSheets);
         setActiveSheet(orderedSheets[0]?.name ?? '');
-        setGlobalBarOrder(DEFAULT_GLOBAL_BAR_ORDER);
-        setGlobalBarLabels(createDefaultGlobalBarLabels());
+        setGlobalBarOrder(soilBarSettings.order);
+        setGlobalBarLabels(createDefaultGlobalBarLabels(soilBarSettings.order, soilBarSettings.labels));
         setRawSheetSnapshot({
           name: sourceSheetName,
           rows: rawMatrix,
@@ -625,13 +663,17 @@ function App() {
         const orderedRows = sheet.rows;
         const headerRowNumber = startRow + 1;
         const rawStartRow = startRow + 2;
-        const summaryStartRow = startRow + 6;
+        const maxRawValueCount = Math.max(
+          ...orderedRows.map((row) => (Array.isArray(row.rawValues) ? row.rawValues.length : 0)),
+          0,
+        );
+        const summaryStartRow = rawStartRow + Math.max(maxRawValueCount, 1);
         const treatmentColumns = orderedRows
           .map((row, index) => ({ row, columnNumber: index + 2 }))
           .filter(({ row }) => Array.isArray(row.rawValues) && row.rawValues.length > 0);
         const treatmentRanges = treatmentColumns.map(
-          ({ columnNumber }) =>
-            `${getExcelColumnName(columnNumber)}${rawStartRow}:${getExcelColumnName(columnNumber)}${rawStartRow + 3}`,
+          ({ row, columnNumber }) =>
+            buildWorksheetValueRange(columnNumber, rawStartRow, row.rawValues.length),
         );
         const allValuesRange = buildCombinedRange(treatmentRanges);
 
@@ -641,7 +683,7 @@ function App() {
           styleTableHeaderCell(headerCell);
         });
 
-        for (let rawIndex = 0; rawIndex < 4; rawIndex += 1) {
+        for (let rawIndex = 0; rawIndex < Math.max(maxRawValueCount, 1); rawIndex += 1) {
           orderedRows.forEach((row, columnIndex) => {
             const cell = worksheet.getCell(rawStartRow + rawIndex, columnIndex + 2);
             const rawValue = row.rawValues?.[rawIndex];
@@ -656,26 +698,20 @@ function App() {
         styleSummaryLabelColumn(worksheet, summaryStartRow);
 
         orderedRows.forEach((row, columnIndex) => {
+          const valueRange =
+            row.rawValues?.length > 0
+              ? buildWorksheetValueRange(columnIndex + 2, rawStartRow, row.rawValues.length)
+              : allValuesRange;
           const meanCell = worksheet.getCell(summaryStartRow, columnIndex + 2);
           meanCell.value = {
-            formula:
-              row.rawValues?.length > 0
-                ? buildMeanFormula(
-                    `${getExcelColumnName(columnIndex + 2)}${rawStartRow}:${getExcelColumnName(columnIndex + 2)}${rawStartRow + 3}`,
-                  )
-                : buildMeanFormula(allValuesRange),
+            formula: valueRange ? buildMeanFormula(valueRange) : '',
             result: toNumber(row[sheet.yKey]),
           };
           styleSummaryValueCell(meanCell);
 
           const seCell = worksheet.getCell(summaryStartRow + 1, columnIndex + 2);
           seCell.value = {
-            formula:
-              row.rawValues?.length > 0
-                ? buildSeFormula(
-                    `${getExcelColumnName(columnIndex + 2)}${rawStartRow}:${getExcelColumnName(columnIndex + 2)}${rawStartRow + 3}`,
-                  )
-                : buildSeFormula(allValuesRange),
+            formula: valueRange ? buildSeFormula(valueRange) : '',
             result: toNumber(row.se),
           };
           styleSummaryValueCell(seCell);
@@ -689,8 +725,10 @@ function App() {
           buffer: dataUrlToUint8Array(chartImage.dataUrl),
           extension: 'png',
         });
+        const imageStartColumn = orderedRows.length + 2;
+        worksheet.getColumn(Math.max(imageStartColumn, 1)).width = 4;
         worksheet.addImage(imageId, {
-          tl: { col: 7, row: startRow - 1 },
+          tl: { col: imageStartColumn, row: startRow - 1 },
           ext: { width: chartImage.width, height: chartImage.height },
         });
 
@@ -1719,7 +1757,15 @@ function buildSeFormula(range) {
 }
 
 function buildCombinedRange(ranges) {
-  return ranges.join(',');
+  return ranges.filter(Boolean).join(',');
+}
+
+function buildWorksheetValueRange(columnNumber, startRow, valueCount) {
+  if (!valueCount) {
+    return '';
+  }
+
+  return `${getExcelColumnName(columnNumber)}${startRow}:${getExcelColumnName(columnNumber)}${startRow + valueCount - 1}`;
 }
 
 function getExcelColumnName(columnNumber) {
@@ -1831,6 +1877,11 @@ function parseWorksheet(worksheet, sheetName, XLSX) {
     defval: '',
     blankrows: false,
   });
+  const objectRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+  const structuredSheets = parseStructuredSoilTabs(objectRows, matrix, sheetName);
+  if (structuredSheets.length) {
+    return structuredSheets;
+  }
 
   return parseRawColumnTabs(matrix, sheetName);
 }
@@ -2294,7 +2345,7 @@ function extractSummaryRows(block) {
   return block.averageColumns
     .map((columnIndex, groupIndex) => {
       const treatmentCell = block.treatmentRow[Math.max(columnIndex - 4, 0)] ?? block.treatmentRow[columnIndex];
-      const treatment = normalizeTreatmentCode(treatmentCell) || TREATMENT_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
+      const treatment = normalizeTreatmentCode(treatmentCell) || LEGACY_TREATMENT_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
       const replicateStart = Math.max(columnIndex - 4, 1);
       const replicateValues = block.tonnesRow
         .slice(replicateStart, columnIndex)
@@ -2430,6 +2481,175 @@ function normalizeTreatmentCode(value) {
   return treatmentMap[normalized] ?? '';
 }
 
+function parseStructuredSoilTabs(rows, matrix, sheetName) {
+  if (!rows.length) {
+    return [];
+  }
+
+  const treatmentField = findSoilTreatmentField(rows);
+  if (!treatmentField) {
+    return [];
+  }
+
+  const treatmentGroups = buildSoilTreatmentGroups(rows, treatmentField);
+  if (treatmentGroups.length < 2) {
+    return [];
+  }
+
+  const headers = (matrix[0] ?? []).map((header) => normalizeCell(header)).filter(isMappedYAxisItem);
+
+  return headers
+    .map((header) => buildStructuredSoilMetricTab(header, treatmentGroups, sheetName, treatmentField))
+    .filter(Boolean);
+}
+
+function findSoilTreatmentField(rows) {
+  for (const field of SOIL_TREATMENT_FIELD_CANDIDATES) {
+    const values = rows.map((row) => normalizeCell(row[field])).filter(Boolean);
+    if (!values.length) {
+      continue;
+    }
+
+    const uniqueValues = new Map();
+    values.forEach((value) => {
+      uniqueValues.set(value, (uniqueValues.get(value) ?? 0) + 1);
+    });
+
+    const counts = [...uniqueValues.values()];
+    const repeatedGroupCount = counts.filter((count) => count > 1).length;
+    const maxGroupSize = Math.max(...counts, 0);
+    const containsText = values.some((value) => /[A-Za-z]/.test(value));
+
+    if (
+      containsText &&
+      uniqueValues.size >= 2 &&
+      uniqueValues.size <= 12 &&
+      repeatedGroupCount >= 2 &&
+      maxGroupSize >= 2
+    ) {
+      return field;
+    }
+  }
+
+  return '';
+}
+
+function buildSoilTreatmentGroups(rows, field) {
+  const groups = new Map();
+
+  rows.forEach((row) => {
+    const rawLabel = normalizeCell(row[field]);
+    if (!rawLabel) {
+      return;
+    }
+
+    const treatmentMeta = getSoilTreatmentMetadata(rawLabel);
+    const key = treatmentMeta.key || rawLabel;
+    const current = groups.get(key) ?? {
+      key,
+      label: treatmentMeta.label || rawLabel,
+      sortKey:
+        treatmentMeta.sortKey ?? Number.MAX_SAFE_INTEGER - 1000 + groups.size,
+      rows: [],
+    };
+
+    current.rows.push(row);
+    groups.set(key, current);
+  });
+
+  return [...groups.values()].sort((left, right) => left.sortKey - right.sortKey);
+}
+
+function getSoilTreatmentMetadata(value) {
+  const normalized = normalizeCell(value).replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return { key: '', label: '', sortKey: Number.MAX_SAFE_INTEGER };
+  }
+
+  const shortCode = normalizeTreatmentCode(normalized);
+  if (shortCode) {
+    const shortCodeIndex = DEFAULT_GLOBAL_BAR_ORDER.indexOf(shortCode);
+    return {
+      key: shortCode,
+      label: shortCode,
+      sortKey: shortCodeIndex === -1 ? Number.MAX_SAFE_INTEGER : shortCodeIndex,
+    };
+  }
+
+  const upperValue = normalized.toUpperCase();
+  const tillageCode = upperValue.includes('CONVENTIONAL TILLAGE')
+    ? 'CT'
+    : upperValue.includes('CONSERVATION TILLAGE')
+      ? 'RT'
+      : '';
+  const mixCode = upperValue.includes('BARLEY U/S TRIPLE MIX')
+    ? 'Barley'
+    : upperValue.includes('MCCAINS MIX')
+      ? 'McCains'
+      : '';
+  const coverCode = upperValue.includes('NO FALL COVER CROP')
+    ? 'NFC'
+    : upperValue.includes('FALL COVER CROP')
+      ? 'FC'
+      : '';
+
+  if (tillageCode && mixCode && coverCode) {
+    const key = `${tillageCode}-${mixCode}-${coverCode}`;
+    const sortKey = DEFAULT_SOIL_TREATMENT_ORDER.indexOf(key);
+
+    return {
+      key,
+      label: key,
+      sortKey: sortKey === -1 ? Number.MAX_SAFE_INTEGER : sortKey,
+    };
+  }
+
+  return {
+    key: normalized,
+    label: normalized,
+    sortKey: Number.MAX_SAFE_INTEGER,
+  };
+}
+
+function buildStructuredSoilMetricTab(header, treatmentGroups, sheetName, treatmentField) {
+  const chartRows = treatmentGroups
+    .map((group) => {
+      const values = group.rows
+        .map((row) => toNumber(row[header]))
+        .filter((value) => Number.isFinite(value));
+
+      if (!values.length) {
+        return null;
+      }
+
+      return {
+        __id: `${header}-${group.key}`,
+        __colorKey: group.key,
+        __defaultLabel: group.label,
+        category: group.label,
+        rawValues: values,
+        se: roundTo(standardError(values), 2),
+        value: roundTo(mean(values), 2),
+      };
+    })
+    .filter(Boolean);
+
+  if (chartRows.length < 2) {
+    return null;
+  }
+
+  return {
+    name: header,
+    rows: chartRows,
+    xKey: 'category',
+    yKey: 'value',
+    xAxisLabel: 'Treatment',
+    yAxisLabel: getDefaultYAxisLabel(header),
+    pValue: oneWayAnovaPValue(chartRows.map((row) => row.rawValues)),
+    sourceNote: `${sheetName} ${treatmentField} grouped column ${header}`,
+  };
+}
+
 function parseRawColumnTabs(matrix, sheetName) {
   const headers = matrix[0] ?? [];
 
@@ -2454,7 +2674,7 @@ function parseRawColumnTab(matrix, sheetName, header, columnIndex) {
   }
 
   const baseRows = groups.map((group, index) => {
-    const label = TREATMENT_LABELS[index] ?? `Group ${index + 1}`;
+    const label = LEGACY_TREATMENT_LABELS[index] ?? `Group ${index + 1}`;
     const groupSe = roundTo(standardError(group), 2);
 
     return {
@@ -2718,7 +2938,21 @@ function roundTo(value, decimals) {
 }
 
 function getBarColor(label) {
-  return BAR_COLORS[label] ?? '#0F766E';
+  if (BAR_COLORS[label]) {
+    return BAR_COLORS[label];
+  }
+
+  const normalizedLabel = normalizeCell(label);
+  if (!normalizedLabel) {
+    return '#0F766E';
+  }
+
+  const paletteIndex = [...normalizedLabel].reduce(
+    (hash, character) => hash + character.charCodeAt(0),
+    0,
+  ) % BAR_COLOR_PALETTE.length;
+
+  return BAR_COLOR_PALETTE[paletteIndex];
 }
 
 function buildYieldFarmEntry(entries) {
@@ -2841,8 +3075,36 @@ function normalizeYieldUnit(value) {
   return normalizeCell(value);
 }
 
-function createDefaultGlobalBarLabels() {
-  return Object.fromEntries(TREATMENT_LABELS.map((label) => [label, label]));
+function createDefaultGlobalBarLabels(order = DEFAULT_GLOBAL_BAR_ORDER, overrides = {}) {
+  return Object.fromEntries(order.map((label) => [label, overrides[label] ?? label]));
+}
+
+function getGlobalBarSettingsFromSheets(sheets) {
+  const order = [];
+  const labels = {};
+  const seen = new Set();
+
+  sheets.forEach((sheet) => {
+    sheet.rows.forEach((row, index) => {
+      const colorKey = normalizeCell(row.__colorKey ?? getDisplayLabel(row, index, sheet.xKey));
+      if (!colorKey || seen.has(colorKey)) {
+        return;
+      }
+
+      seen.add(colorKey);
+      order.push(colorKey);
+      labels[colorKey] = row.__defaultLabel ?? getDisplayLabel(row, index, sheet.xKey);
+    });
+  });
+
+  if (!order.length) {
+    return {
+      order: DEFAULT_GLOBAL_BAR_ORDER,
+      labels: createDefaultGlobalBarLabels(),
+    };
+  }
+
+  return { order, labels };
 }
 
 function orderRowsByTreatment(rows, treatmentOrder) {
