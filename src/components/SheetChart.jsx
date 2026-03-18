@@ -123,7 +123,7 @@ function SheetChart({
           tickLine={false}
           axisLine={false}
           interval={0}
-          tickMargin={10}
+          tickMargin={20}
           tick={(props) => (
             <WrappedXAxisTick
               {...props}
@@ -137,6 +137,7 @@ function SheetChart({
           width={yAxisWidth}
           tickLine={false}
           axisLine={false}
+          tickMargin={10}
           tick={{
             fill: '#1f2937',
             fontSize: tickFontSize,
