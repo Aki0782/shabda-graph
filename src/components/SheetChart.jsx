@@ -21,6 +21,7 @@ const Y_AXIS_TITLE_GAP = 18;
 const Y_AXIS_TICK_GAP = 12;
 const X_AXIS_TITLE_GAP = 16;
 const X_AXIS_TICK_ROTATION = -28;
+const AXIS_POSITION_CONTROL_RANGE = 60;
 
 function SheetChart({
   chartData,
@@ -60,9 +61,12 @@ function SheetChart({
   const yAxisLines = wrapAxisText(yAxisLabel, maxYAxisLineLength, yAxisTitleFontSize);
   const yAxisTitleWidth = Math.max(yAxisLineStep, yAxisLines.length * yAxisLineStep);
   const baseLeftMargin = Math.max(24, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP));
-  const leftMargin = Math.max(baseLeftMargin, Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP + Math.max(0, -yAxisTitleOffset)));
+  const leftMargin = Math.max(
+    baseLeftMargin,
+    Math.ceil(yAxisTitleWidth + Y_AXIS_TITLE_GAP + AXIS_POSITION_CONTROL_RANGE),
+  );
   const minBandWidth = isGrouped ? MIN_GROUPED_BAND_WIDTH : MIN_SINGLE_BAND_WIDTH;
-  const minPlotWidth = Math.max(220, BASE_CHART_WIDTH - baseLeftMargin - yAxisWidth - RIGHT_MARGIN);
+  const minPlotWidth = Math.max(220, BASE_CHART_WIDTH - leftMargin - yAxisWidth - RIGHT_MARGIN);
   const xAxisLineHeight = Math.max(16, Math.round(tickFontSize * 0.95));
   const baseTickWrapWidth = Math.max(28, minBandWidth - (isGrouped ? 10 : 8));
   const estimatedTickLines = safeChartData.map((entry) => wrapAxisText(entry.category, baseTickWrapWidth, tickFontSize));
@@ -79,14 +83,18 @@ function SheetChart({
     ...xAxisTickLines.map((lines) => getRotatedLabelFootprint(lines, tickFontSize, xAxisLineHeight).height),
     tickFontSize,
   );
-  const xAxisHeight = Math.max(
+  const baseXAxisHeight = Math.max(
     tickFontSize + 12,
-    Math.ceil(maxXAxisTickHeight) + 14 + Math.max(0, xAxisTickOffset),
+    Math.ceil(maxXAxisTickHeight) + 14,
   );
+  const xAxisHeight = baseXAxisHeight + AXIS_POSITION_CONTROL_RANGE;
   const xAxisTitleLines = wrapAxisText(xAxisLabel, Math.max(plotWidth - 16, 40), xAxisTitleFontSize);
   const xAxisTitleLineHeight = Math.max(18, Math.round(xAxisTitleFontSize * 1.1));
   const xAxisTitleHeight = xAxisLabel ? xAxisTitleLines.length * xAxisTitleLineHeight : 0;
-  const bottomMargin = Math.max(48, xAxisHeight + xAxisTitleHeight + X_AXIS_TITLE_GAP + Math.max(0, xAxisTitleOffset));
+  const bottomMargin = Math.max(
+    48,
+    xAxisHeight + xAxisTitleHeight + X_AXIS_TITLE_GAP + AXIS_POSITION_CONTROL_RANGE,
+  );
   const chartHeight = TOP_MARGIN + plotHeight + bottomMargin;
   const margins = { top: TOP_MARGIN, right: RIGHT_MARGIN, left: leftMargin, bottom: bottomMargin };
   const seriesMap = Object.fromEntries(
@@ -219,7 +227,8 @@ function SheetChart({
             <AxisLabels
               {...props}
               xAxisLines={xAxisTitleLines}
-              xAxisTickHeight={xAxisHeight}
+              xAxisTickHeight={baseXAxisHeight}
+              xAxisTickOffset={xAxisTickOffset}
               xAxisTitleLineHeight={xAxisTitleLineHeight}
               yAxisLines={yAxisLines}
               xAxisTitleFontSize={xAxisTitleFontSize}
@@ -333,6 +342,7 @@ function AxisLabels({
   offset,
   xAxisLines,
   xAxisTickHeight,
+  xAxisTickOffset,
   xAxisTitleLineHeight,
   yAxisLines,
   xAxisTitleFontSize,
@@ -349,7 +359,14 @@ function AxisLabels({
   const yAxisTitleWidth = Math.max(yAxisLineStep, offset.left - yAxisWidth - Y_AXIS_TICK_GAP);
   const yAxisBaseX = Math.max(yAxisLineStep / 2, yAxisTitleWidth - yAxisLineStep / 2) + yAxisTitleOffset;
   const yAxisBaseY = offset.top + offset.height / 2;
-  const xAxisLabelY = offset.top + offset.height + xAxisTickHeight + xAxisTitleLineHeight - 4 + xAxisTitleOffset;
+  const xAxisLabelY =
+    offset.top +
+    offset.height +
+    xAxisTickHeight +
+    Math.max(0, xAxisTickOffset) +
+    xAxisTitleLineHeight -
+    4 +
+    xAxisTitleOffset;
   const orderedYAxisLines = [...yAxisLines].reverse();
 
   return (
