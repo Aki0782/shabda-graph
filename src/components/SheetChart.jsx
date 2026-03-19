@@ -15,8 +15,8 @@ const BASE_CHART_WIDTH = 760;
 const BASE_PLOT_HEIGHT = 520;
 const RIGHT_MARGIN = 32;
 const TOP_MARGIN = 34;
-const MIN_SINGLE_BAND_WIDTH = 74;
-const MIN_GROUPED_BAND_WIDTH = 88;
+const MIN_SINGLE_BAND_WIDTH = 88;
+const MIN_GROUPED_BAND_WIDTH = 108;
 const Y_AXIS_TITLE_GAP = 18;
 const Y_AXIS_TICK_GAP = 12;
 const X_AXIS_TITLE_GAP = 16;
@@ -33,6 +33,7 @@ function SheetChart({
   yAxisTitleFontSize = DEFAULT_CHART_FONT_SIZE,
   legendFontSize = DEFAULT_CHART_FONT_SIZE,
   pValueFontSize = DEFAULT_CHART_FONT_SIZE,
+  xAxisTickOffset = 0,
   xAxisTitleOffset = 0,
   yAxisTitleOffset = 0,
   disableAnimation = false,
@@ -78,7 +79,10 @@ function SheetChart({
     ...xAxisTickLines.map((lines) => getRotatedLabelFootprint(lines, tickFontSize, xAxisLineHeight).height),
     tickFontSize,
   );
-  const xAxisHeight = Math.max(tickFontSize + 12, Math.ceil(maxXAxisTickHeight) + 14);
+  const xAxisHeight = Math.max(
+    tickFontSize + 12,
+    Math.ceil(maxXAxisTickHeight) + 14 + Math.max(0, xAxisTickOffset),
+  );
   const xAxisTitleLines = wrapAxisText(xAxisLabel, Math.max(plotWidth - 16, 40), xAxisTitleFontSize);
   const xAxisTitleLineHeight = Math.max(18, Math.round(xAxisTitleFontSize * 1.1));
   const xAxisTitleHeight = xAxisLabel ? xAxisTitleLines.length * xAxisTitleLineHeight : 0;
@@ -129,6 +133,7 @@ function SheetChart({
               {...props}
               fontSize={tickFontSize}
               lineHeight={xAxisLineHeight}
+              offset={xAxisTickOffset}
               lines={xAxisTickLines[props.index] ?? wrapAxisText(props.payload?.value, tickWrapWidth, tickFontSize)}
             />
           )}
@@ -390,18 +395,20 @@ function AxisLabels({
   );
 }
 
-function WrappedXAxisTick({ x, y, lines, fontSize, lineHeight }) {
+function WrappedXAxisTick({ x, y, lines, fontSize, lineHeight, offset = 0 }) {
+  const tickY = y + 12 + offset;
+
   return (
     <text
       x={x}
-      y={y + 12}
+      y={tickY}
       textAnchor="middle"
       dominantBaseline="hanging"
       fill="#1f2937"
       fontSize={fontSize}
       fontWeight="600"
       fontFamily={CHART_FONT_FAMILY}
-      transform={`rotate(${X_AXIS_TICK_ROTATION} ${x} ${y + 12})`}
+      transform={`rotate(${X_AXIS_TICK_ROTATION} ${x} ${tickY})`}
     >
       {lines.map((line, index) => (
         <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : lineHeight}>
@@ -512,10 +519,7 @@ function wrapAxisText(value, maxWidth, fontSize) {
 }
 
 function tokenizeAxisText(text) {
-  return text
-    .replaceAll(/([/_-])/g, ' $1 ')
-    .split(/\s+/)
-    .filter(Boolean);
+  return text.split(/\s+/).filter(Boolean);
 }
 
 function splitLongToken(token, maxWidth, fontSize) {

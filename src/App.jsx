@@ -32,6 +32,7 @@ const DEFAULT_CHART_TEXT_SETTINGS = {
   yAxisTitleFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
   legendFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
   pValueFontSize: DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTickOffset: 0,
   xAxisTitleOffset: 0,
   yAxisTitleOffset: 0,
 };
@@ -41,6 +42,7 @@ const CHART_TEXT_CONTROL_FIELDS = [
   { key: 'yAxisTitleFontSize', label: 'Y-axis title', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
   { key: 'legendFontSize', label: 'Legend', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
   { key: 'pValueFontSize', label: 'P-value', min: 12, max: 32, defaultValue: DEFAULT_SOIL_CHART_FONT_SIZE, unit: 'px' },
+  { key: 'xAxisTickOffset', label: 'X-axis bar labels position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
   { key: 'xAxisTitleOffset', label: 'X-axis title position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
   { key: 'yAxisTitleOffset', label: 'Y-axis title position', min: -60, max: 60, defaultValue: 0, unit: 'px' },
 ];
@@ -1368,6 +1370,7 @@ async function createChartPngDataUrl({
   yAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
   legendFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
   pValueFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTickOffset = 0,
   xAxisTitleOffset = 0,
   yAxisTitleOffset = 0,
 }) {
@@ -1382,6 +1385,7 @@ async function createChartPngDataUrl({
     yAxisTitleFontSize,
     legendFontSize,
     pValueFontSize,
+    xAxisTickOffset,
     xAxisTitleOffset,
     yAxisTitleOffset,
   });
@@ -1398,6 +1402,7 @@ async function renderChartForExport({
   yAxisTitleFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
   legendFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
   pValueFontSize = DEFAULT_SOIL_CHART_FONT_SIZE,
+  xAxisTickOffset = 0,
   xAxisTitleOffset = 0,
   yAxisTitleOffset = 0,
 }) {
@@ -1429,6 +1434,7 @@ async function renderChartForExport({
           yAxisTitleFontSize={yAxisTitleFontSize}
           legendFontSize={legendFontSize}
           pValueFontSize={pValueFontSize}
+          xAxisTickOffset={xAxisTickOffset}
           xAxisTitleOffset={xAxisTitleOffset}
           yAxisTitleOffset={yAxisTitleOffset}
           disableAnimation
